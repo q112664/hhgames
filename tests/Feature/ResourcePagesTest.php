@@ -644,6 +644,174 @@ test('resource download page can be viewed for a specific file', function () {
         );
 });
 
+test('resource download page does not fabricate missing passwords', function () {
+    $resource = Resource::factory()->create([
+        'title' => '下载密码逻辑测试页',
+        'slug' => 'download-password-logic',
+        'files' => [
+            [
+                'name' => '免密资源',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '2.1 GB',
+                'download_url' => 'https://pan.quark.cn/s/no-password',
+                'uploaded_at' => '今天 20:12',
+                'download_detail' => '当前条目没有提供任何密码。',
+                'uploader' => [
+                    'name' => 'Test User',
+                    'avatar' => null,
+                ],
+            ],
+            [
+                'name' => '仅提取密码资源',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '3.3 GB',
+                'extract_code' => 'QK22',
+                'download_url' => 'https://pan.quark.cn/s/extract-only',
+                'uploaded_at' => '今天 20:16',
+                'uploader' => [
+                    'name' => 'Test User',
+                    'avatar' => null,
+                ],
+            ],
+        ],
+    ]);
+
+    $this->get(route('resources.download', [
+        'resource' => $resource->slug,
+        'entry' => 'entry-1',
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('resources/download')
+            ->where('download.name', '免密资源')
+            ->where('download.code', null)
+            ->where('download.extract_code', null),
+        );
+
+    $this->get(route('resources.download', [
+        'resource' => $resource->slug,
+        'entry' => 'entry-2',
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('resources/download')
+            ->where('download.name', '仅提取密码资源')
+            ->where('download.code', null)
+            ->where('download.extract_code', 'QK22'),
+        );
+});
+
+test('admin can view the resource file creation page', function () {
+    $user = User::factory()->create([
+        'is_admin' => true,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'title' => '条目创建测试资源',
+        'slug' => 'file-create-resource',
+    ]);
+
+    $response = $this->actingAs($user)->get(route('resources.files.create', [
+        'resource' => $resource->slug,
+    ]));
+
+    $response
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('resources/file-create')
+            ->where('resource.slug', 'file-create-resource')
+            ->where('defaults.platform', 'Windows')
+            ->where('defaults.language', '简体中文'));
+});
+
+test('non-admin users cannot access the resource file creation page', function () {
+    $user = User::factory()->create([
+        'is_admin' => false,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'slug' => 'forbidden-file-create',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('resources.files.create', [
+            'resource' => $resource->slug,
+        ]))
+        ->assertForbidden();
+});
+
+test('admin can append a downloadable file to an existing resource', function () {
+    $user = User::factory()->create([
+        'name' => '资源管理员',
+        'is_admin' => true,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'title' => '可追加资源测试',
+        'slug' => 'appendable-resource',
+        'files' => [
+            [
+                'name' => '已有资源',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '1.2 GB',
+                'code' => 'OLD123',
+                'uploaded_at' => '2026-03-30',
+            ],
+        ],
+    ]);
+
+    $response = $this->actingAs($user)->post(route('resources.files.store', [
+        'resource' => $resource->slug,
+    ]), [
+        'platform' => '安卓',
+        'language' => '日语',
+        'size' => '328 MB',
+        'code' => 'PATCH2026',
+        'extract_code' => 'QK8M',
+        'download_url' => 'https://pan.quark.cn/s/new-entry',
+        'download_detail' => '先覆盖补丁，再重新启动游戏。',
+    ]);
+
+    $response->assertRedirect(route('resources.download', [
+        'resource' => 'appendable-resource',
+        'entry' => 'entry-2',
+    ]));
+
+    $resource->refresh();
+
+    expect($resource->files)->toHaveCount(2);
+    expect($resource->files[1])->toMatchArray([
+        'name' => '可追加资源测试',
+        'status' => '可下载',
+        'platform' => '安卓',
+        'language' => '日语',
+        'size' => '328 MB',
+        'code' => 'PATCH2026',
+        'extract_code' => 'QK8M',
+        'uploaded_at' => $resource->published_at?->format('Y-m-d'),
+        'download_url' => 'https://pan.quark.cn/s/new-entry',
+        'download_detail' => '先覆盖补丁，再重新启动游戏。',
+        'action_label' => '查看',
+    ]);
+    expect($resource->files[1]['uploader']['name'])->toBe('资源管理员');
+
+    $this->get(route('resources.download', [
+        'resource' => $resource->slug,
+        'entry' => 'entry-2',
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('resources/download')
+            ->where('download.name', '可追加资源测试')
+            ->where('download.code', 'PATCH2026')
+            ->where('download.extract_code', 'QK8M')
+            ->where('download.download_url', 'https://pan.quark.cn/s/new-entry')
+            ->where('download.download_detail', '先覆盖补丁，再重新启动游戏。'));
+});
+
 test('resource download page returns 404 for missing file code', function () {
     $resource = Resource::factory()->create([
         'slug' => 'missing-download-code',

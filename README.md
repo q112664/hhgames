@@ -129,7 +129,7 @@ composer run setup
 执行 `php artisan db:seed` 后，`DatabaseSeeder` 会创建一个后台管理员：
 
 - 邮箱：`test@example.com`
-- 密码：`password`
+- 密码：`admin`
 
 后台路径来自 [AdminPanelProvider.php](D:/laravel/games/app/Providers/Filament/AdminPanelProvider.php)，当前是：
 

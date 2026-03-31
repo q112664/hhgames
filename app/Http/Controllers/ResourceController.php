@@ -295,8 +295,7 @@ class ResourceController extends Controller
                 'size' => $file['size']
                     ?? $this->resolveLegacyFileField($file['detail'] ?? null, 2)
                     ?? '未知大小',
-                'code' => strtoupper((string) ($file['code']
-                    ?? substr(sha1(($resource->slug ?? 'resource').'-'.($file['name'] ?? 'file')), 0, 10))),
+                'code' => $this->resolveUnzipCode($file),
                 'extract_code' => $this->resolveExtractCode($file),
                 'uploaded_at' => $file['uploaded_at'] ?? $file['updated_at'] ?? '刚刚',
                 'download_detail' => isset($file['download_detail']) && is_string($file['download_detail']) && trim($file['download_detail']) !== ''
@@ -332,6 +331,19 @@ class ResourceController extends Controller
     private function resolveDownloadUrl(array $file): ?string
     {
         foreach (['download_url', 'url', 'link'] as $key) {
+            $value = $file[$key] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveUnzipCode(array $file): ?string
+    {
+        foreach (['code', 'unzip_code', 'unpack_code', 'archive_password', 'decompression_password'] as $key) {
             $value = $file[$key] ?? null;
 
             if (is_string($value) && trim($value) !== '') {

@@ -40,7 +40,26 @@ export default function ResourceDownload({
     const displayDownloadUrl =
         download.download_url ?? 'https://pan.quark.cn/s/example-download';
     const isPlaceholderDownloadUrl = !download.download_url;
-
+    const displayUnzipCode =
+        normalizePassword(download.code) ??
+        (isPlaceholderDownloadUrl ? 'MOEGAME' : null);
+    const displayExtractCode =
+        normalizePassword(download.extract_code) ??
+        (isPlaceholderDownloadUrl ? 'QK8M' : null);
+    const passwordItems = [
+        {
+            key: 'unzip',
+            label: '解压码',
+            value: displayUnzipCode,
+        },
+        {
+            key: 'extract',
+            label: '提取密码',
+            value: displayExtractCode,
+        },
+    ].filter((item): item is { key: string; label: string; value: string } =>
+        typeof item.value === 'string' && item.value.trim() !== '',
+    );
     return (
         <>
             <Head title={`${cleanedDownloadName} - 下载资源`} />
@@ -157,12 +176,15 @@ export default function ResourceDownload({
 
                                 <Button
                                     type="button"
-                                    variant="outline"
+                                    variant="ghost"
                                     size="sm"
-                                    className="self-start sm:self-auto"
+                                    className="group self-start rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-3.5 text-amber-700 shadow-sm transition-all hover:border-amber-500/35 hover:bg-amber-500/[0.14] hover:text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/[0.1] dark:text-amber-200 dark:hover:border-amber-400/35 dark:hover:bg-amber-400/[0.16] dark:hover:text-amber-100 sm:self-auto"
                                 >
-                                    <TriangleAlert data-icon="inline-start" />
-                                    报告链接过期
+                                    <TriangleAlert
+                                        data-icon="inline-start"
+                                        className="transition-transform group-hover:scale-105"
+                                    />
+                                    链接过期反馈
                                 </Button>
                             </div>
 
@@ -191,21 +213,19 @@ export default function ResourceDownload({
                                                     夸克网盘
                                                 </Badge>
                                             </div>
-                                            <p className="text-sm leading-7 text-muted-foreground">
-                                                先复制解压码，再返回下载区继续获取资源内容。
-                                            </p>
                                         </div>
 
-                                        <div className="flex flex-wrap gap-2">
-                                            <PasswordButton
-                                                label="解压码"
-                                                value={download.code}
-                                            />
-                                            <PasswordButton
-                                                label="提取密码"
-                                                value={download.extract_code}
-                                            />
-                                        </div>
+                                        {passwordItems.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {passwordItems.map((item) => (
+                                                    <PasswordButton
+                                                        key={item.key}
+                                                        label={item.label}
+                                                        value={item.value}
+                                                    />
+                                                ))}
+                                            </div>
+                                        ) : null}
 
                                         <div className="space-y-1">
                                             <p className="text-sm text-muted-foreground">
@@ -281,24 +301,29 @@ function cleanDownloadName(name: string) {
     return name.replaceAll('原站条目整理', '').trim();
 }
 
+function normalizePassword(value?: string | null) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const normalized = value.trim();
+
+    return normalized !== '' ? normalized : null;
+}
+
 function PasswordButton({
     label,
     value,
 }: {
     label: string;
-    value?: string | null;
+    value: string;
 }) {
     const [copyState, setCopyState] = useState<'idle' | 'success' | 'error'>(
         'idle',
     );
     const copyTimeoutRef = useRef<number | null>(null);
-    const isUnavailable = !value;
 
     const handleCopy = async () => {
-        if (!value) {
-            return;
-        }
-
         const success = await copyText(value);
         setCopyState(success ? 'success' : 'error');
 
@@ -317,33 +342,30 @@ function PasswordButton({
             onClick={() => {
                 void handleCopy();
             }}
-            disabled={isUnavailable}
-            className="inline-flex min-h-9 items-center gap-2.5 rounded-xl border border-border bg-background/85 px-3 py-1.5 text-left transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-border bg-background/85 px-2.5 py-1 text-left transition-colors hover:bg-background"
         >
-            <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="font-mono text-sm font-semibold tracking-[0.08em] text-foreground">
-                {value ?? '未提供'}
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="font-mono text-xs font-semibold tracking-[0.04em] text-foreground">
+                {value}
             </span>
-            {!isUnavailable ? (
-                <span className="inline-flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-300">
-                    {copyState === 'success' ? (
-                        <>
-                            <Check className="size-4" />
-                            已复制
-                        </>
-                    ) : copyState === 'error' ? (
-                        <>
-                            <Copy className="size-4" />
-                            复制失败
-                        </>
-                    ) : (
-                        <>
-                            <Copy className="size-4" />
-                            复制
-                        </>
-                    )}
-                </span>
-            ) : null}
+            <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300">
+                {copyState === 'success' ? (
+                    <>
+                        <Check className="size-3.5" />
+                        已复制
+                    </>
+                ) : copyState === 'error' ? (
+                    <>
+                        <Copy className="size-3.5" />
+                        复制失败
+                    </>
+                ) : (
+                    <>
+                        <Copy className="size-3.5" />
+                        复制
+                    </>
+                )}
+            </span>
         </button>
     );
 }

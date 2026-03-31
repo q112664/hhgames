@@ -56,7 +56,7 @@ export type ResourceFileItem = {
     platform: string;
     language: string;
     size: string;
-    code: string;
+    code?: string | null;
     extract_code?: string | null;
     uploaded_at: string;
     download_detail?: string | null;

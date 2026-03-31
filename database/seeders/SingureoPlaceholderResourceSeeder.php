@@ -26,6 +26,7 @@ class SingureoPlaceholderResourceSeeder extends Seeder
             ?? User::factory()->create([
                 'name' => 'Singureo Seeder',
                 'email' => 'singureo-seeder@example.com',
+                'password' => 'admin',
                 'is_admin' => true,
                 'panel_role' => 'super_admin',
             ]);

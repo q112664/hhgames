@@ -22,6 +22,7 @@ class ShionlibPlaceholderResourceSeeder extends Seeder
             ?? User::factory()->create([
                 'name' => 'Shionlib Seeder',
                 'email' => 'shionlib-seeder@example.com',
+                'password' => 'admin',
                 'is_admin' => true,
                 'panel_role' => 'super_admin',
             ]);

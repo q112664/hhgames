@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import {
     Box,
     Cloud,
@@ -10,6 +10,7 @@ import {
     HardDrive,
     Monitor,
     PencilLine,
+    Plus,
     Tag,
     Trash2,
 } from 'lucide-react';
@@ -224,9 +225,13 @@ function FilesPanel({
     resourcePublishedLabel: string | null;
     sectionData: ResourceFilesSectionData;
 }) {
+    const { auth } = usePage().props;
+    const canManageResourceFiles = Boolean(auth.user?.is_admin);
+    const createFileUrl = `/resources/${resourceSlug}/files/create`;
+
     return (
         <div className="space-y-4">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
                     <h2 className="text-xl font-semibold tracking-tight">
                         资源列表
@@ -235,6 +240,19 @@ function FilesPanel({
                         先确认平台、语言、大小与串码，再选择对应资源查看详情。
                     </p>
                 </div>
+
+                {canManageResourceFiles ? (
+                    <Button
+                        asChild
+                        size="sm"
+                        className="h-9 rounded-full px-4 sm:shrink-0"
+                    >
+                        <Link href={createFileUrl}>
+                            <Plus data-icon="inline-start" />
+                            添加资源
+                        </Link>
+                    </Button>
+                ) : null}
             </div>
 
             <div className="space-y-3">
@@ -243,7 +261,7 @@ function FilesPanel({
                 ) : (
                     sectionData.files.map((item, index) => (
                         <DownloadListRow
-                            key={`${item.code}-${item.name}-${index}`}
+                            key={`${item.entry_key}-${item.name}-${index}`}
                             resourceSlug={resourceSlug}
                             resourceCategory={resourceCategory}
                             resourceDownloads={resourceDownloads}
