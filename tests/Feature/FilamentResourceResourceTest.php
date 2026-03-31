@@ -6,6 +6,7 @@ use App\Models\PostCategory;
 use App\Models\PostTag;
 use App\Models\Resource;
 use App\Models\User;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Livewire\Livewire;
 
@@ -91,7 +92,7 @@ test('admin users can create a resource with the minimal frontend fields', funct
         ->assertInertia(fn (Assert $page) => $page
             ->where('resource.title', '后台创建的测试资源')
             ->where('resource.subtitle', '这是后台为资源补充的一条副标题。')
-            ->where('resource.cover', 'http://games.test/storage/resources/screenshots/test-1.png')
+            ->where('resource.cover', Storage::disk('public')->url('resources/screenshots/test-1.png'))
             ->where('resource.category', 'Galgame')
             ->where('resource.tags.0', '剧情向')
             ->where('sectionData.description', '<p>这是一条由后台直接创建的资源正文。</p>'));
@@ -178,5 +179,5 @@ test('explicit uploaded cover is preferred over screenshots', function () {
     $response
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('resource.cover', 'http://games.test/storage/resources/covers/manual-cover.png'));
+            ->where('resource.cover', Storage::disk('public')->url('resources/covers/manual-cover.png')));
 });

@@ -21,7 +21,7 @@ class HomeController extends Controller
             ->limit(4)
             ->get();
 
-        return Inertia::render('welcome', [
+        return Inertia::render('home', [
             'canRegister' => Features::enabled(Features::registration()),
             'latestResources' => ResourceCardResource::collection($latestResources)->resolve(),
             'resourcesIndexUrl' => route('resources.index'),

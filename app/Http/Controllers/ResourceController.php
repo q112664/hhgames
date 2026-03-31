@@ -297,10 +297,12 @@ class ResourceController extends Controller
                     ?? '未知大小',
                 'code' => strtoupper((string) ($file['code']
                     ?? substr(sha1(($resource->slug ?? 'resource').'-'.($file['name'] ?? 'file')), 0, 10))),
+                'extract_code' => $this->resolveExtractCode($file),
                 'uploaded_at' => $file['uploaded_at'] ?? $file['updated_at'] ?? '刚刚',
                 'download_detail' => isset($file['download_detail']) && is_string($file['download_detail']) && trim($file['download_detail']) !== ''
                     ? trim($file['download_detail'])
                     : null,
+                'download_url' => $this->resolveDownloadUrl($file),
                 'uploader' => [
                     'name' => $file['uploader']['name']
                         ?? $resource->user?->name
@@ -325,6 +327,32 @@ class ResourceController extends Controller
         $segments = array_values(array_filter(array_map('trim', explode('/', $detail))));
 
         return $segments[$index] ?? null;
+    }
+
+    private function resolveDownloadUrl(array $file): ?string
+    {
+        foreach (['download_url', 'url', 'link'] as $key) {
+            $value = $file[$key] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveExtractCode(array $file): ?string
+    {
+        foreach (['extract_code', 'extraction_code', 'fetch_code', 'pickup_code'] as $key) {
+            $value = $file[$key] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return null;
     }
 
     /**

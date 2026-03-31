@@ -57,8 +57,10 @@ export type ResourceFileItem = {
     language: string;
     size: string;
     code: string;
+    extract_code?: string | null;
     uploaded_at: string;
     download_detail?: string | null;
+    download_url?: string | null;
     uploader: {
         name: string;
         avatar: string | null;

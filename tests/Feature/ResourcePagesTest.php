@@ -54,12 +54,12 @@ test('home page is displayed with latest resources in published order', function
     $response
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('welcome')
+            ->component('home')
             ->has('latestResources', 3)
             ->where('name', 'Velvet Archive')
             ->where('site.name', 'Velvet Archive')
             ->where('site.url', 'https://games.test')
-            ->where('site.logo', 'http://games.test/storage/site-settings/logo.png')
+            ->where('site.logo', Storage::disk('public')->url('site-settings/logo.png'))
             ->where('site.navigation.0.label', '首页')
             ->where('site.navigation.1.href', '/resources')
             ->where('site.navigation.2.group', '资源浏览')
@@ -244,6 +244,27 @@ test('resource detail page can be viewed by slug', function () {
         );
 });
 
+test('resource detail page formats updated label with a space after the number', function () {
+    $user = User::factory()->create();
+
+    $this->travelTo(now()->startOfMinute());
+
+    $resource = Resource::factory()
+        ->for($user)
+        ->create([
+            'title' => '更新时间格式资源',
+            'slug' => 'updated-label-spacing-resource',
+            'updated_at' => now()->subHour(),
+        ]);
+
+    $response = $this->get(route('resources.show', ['resource' => $resource->slug]));
+
+    $response
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('resource.updatedLabel', '1 小时前'));
+});
+
 test('authenticated user can like and unlike a resource from the detail page', function () {
     $user = User::factory()->create();
     $updatedAt = now()->subDays(2)->startOfMinute();
@@ -411,7 +432,7 @@ test('resource pages fall back to the first screenshot when cover is missing', f
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('resources.data.0.slug', $resource->slug)
-            ->where('resources.data.0.cover', 'http://games.test/storage/resources/screenshots/fallback-cover.png'));
+            ->where('resources.data.0.cover', Storage::disk('public')->url('resources/screenshots/fallback-cover.png')));
 
     $detailResponse = $this->get(route('resources.show', ['resource' => $resource->slug]));
 
@@ -419,7 +440,7 @@ test('resource pages fall back to the first screenshot when cover is missing', f
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('resource.slug', $resource->slug)
-            ->where('resource.cover', 'http://games.test/storage/resources/screenshots/fallback-cover.png'));
+            ->where('resource.cover', Storage::disk('public')->url('resources/screenshots/fallback-cover.png')));
 });
 
 test('resource list and detail use the generated thumbnail for uploaded covers', function () {
@@ -590,6 +611,8 @@ test('resource download page can be viewed for a specific file', function () {
                 'language' => '简体中文',
                 'size' => '4.8 GB',
                 'code' => 'AB12CD34EF',
+                'extract_code' => 'QK8M',
+                'download_url' => 'https://pan.quark.cn/s/example-download',
                 'uploaded_at' => '今天 18:24',
                 'download_detail' => '这是一个下载详情占位。',
                 'uploader' => [
@@ -615,6 +638,8 @@ test('resource download page can be viewed for a specific file', function () {
             ->where('download.entry_key', 'entry-1')
             ->where('download.name', '游戏本体')
             ->where('download.code', 'AB12CD34EF')
+            ->where('download.extract_code', 'QK8M')
+            ->where('download.download_url', 'https://pan.quark.cn/s/example-download')
             ->where('download.download_detail', '这是一个下载详情占位。'),
         );
 });

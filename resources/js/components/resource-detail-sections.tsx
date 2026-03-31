@@ -1,22 +1,34 @@
 import { Link, router } from '@inertiajs/react';
 import {
     Box,
+    Cloud,
+    Clock3,
     Download,
+    EllipsisVertical,
     FileImage,
     FileText,
     HardDrive,
     Monitor,
+    PencilLine,
     Tag,
-    ThumbsUp,
+    Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
 import Lightbox from 'yet-another-react-lightbox';
 import DownloadPlugin from 'yet-another-react-lightbox/plugins/download';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import 'yet-another-react-lightbox/styles.css';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 import resources from '@/routes/resources';
 import type {
     ResourceDescriptionSectionData,
@@ -45,10 +57,16 @@ const sectionItems = [
 
 export default function ResourceDetailSections({
     resourceSlug,
+    resourceCategory,
+    resourceDownloads,
+    resourcePublishedLabel,
     section,
     sectionData,
 }: {
     resourceSlug: string;
+    resourceCategory: string;
+    resourceDownloads: string;
+    resourcePublishedLabel: string | null;
     section: ResourceDetailSection;
     sectionData:
         | ResourceDescriptionSectionData
@@ -106,6 +124,9 @@ export default function ResourceDetailSections({
                     {sectionData.type === 'files' && (
                         <FilesPanel
                             resourceSlug={resourceSlug}
+                            resourceCategory={resourceCategory}
+                            resourceDownloads={resourceDownloads}
+                            resourcePublishedLabel={resourcePublishedLabel}
                             sectionData={sectionData}
                         />
                     )}
@@ -192,9 +213,15 @@ function escapeHtml(content: string) {
 
 function FilesPanel({
     resourceSlug,
+    resourceCategory,
+    resourceDownloads,
+    resourcePublishedLabel,
     sectionData,
 }: {
     resourceSlug: string;
+    resourceCategory: string;
+    resourceDownloads: string;
+    resourcePublishedLabel: string | null;
     sectionData: ResourceFilesSectionData;
 }) {
     return (
@@ -218,6 +245,9 @@ function FilesPanel({
                         <DownloadListRow
                             key={`${item.code}-${item.name}-${index}`}
                             resourceSlug={resourceSlug}
+                            resourceCategory={resourceCategory}
+                            resourceDownloads={resourceDownloads}
+                            resourcePublishedLabel={resourcePublishedLabel}
                             item={item}
                         />
                     ))
@@ -329,9 +359,15 @@ function EmptyPanel({ text }: { text: string }) {
 
 function DownloadListRow({
     resourceSlug,
+    resourceCategory,
+    resourceDownloads,
+    resourcePublishedLabel,
     item,
 }: {
     resourceSlug: string;
+    resourceCategory: string;
+    resourceDownloads: string;
+    resourcePublishedLabel: string | null;
     item: ResourceFilesSectionData['files'][number];
 }) {
     const actionLabel =
@@ -343,9 +379,8 @@ function DownloadListRow({
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <MetaPill
                         icon={Box}
-                        label={item.name}
+                        label={resourceCategory}
                         className="max-w-full border-primary/15 bg-primary/[0.08] text-primary"
-                        labelClassName="truncate"
                     />
                     <MetaPill
                         icon={HardDrive}
@@ -366,29 +401,68 @@ function DownloadListRow({
 
                 <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between lg:flex-none lg:gap-4 lg:border-t-0 lg:pt-0">
                     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground/85">
+                        <span className="inline-flex items-center gap-1.5 font-medium text-foreground/85">
+                            <Cloud className="size-4" />
                             夸克网盘
                         </span>
                         <span className="inline-flex items-center gap-1.5">
-                            <Download className="size-4" />
-                            0
+                            <Clock3 className="size-4" />
+                            {resourcePublishedLabel ?? '未知'}
                         </span>
                         <span className="inline-flex items-center gap-1.5">
-                            <ThumbsUp className="size-4" />
-                            0
+                            <Download className="size-4" />
+                            {resourceDownloads}
                         </span>
                     </div>
 
-                    <Button asChild type="button" size="sm" className="h-9 rounded-xl px-4">
-                        <Link
-                            href={resources.download({
-                                resource: resourceSlug,
-                                entry: item.entry_key,
-                            }).url}
+                    <div className="flex items-center gap-2 sm:justify-end">
+                        <Button
+                            asChild
+                            type="button"
+                            size="sm"
+                            className="h-9 rounded-xl px-4"
                         >
-                            {actionLabel}
-                        </Link>
-                    </Button>
+                            <Link
+                                href={resources.download({
+                                    resource: resourceSlug,
+                                    entry: item.entry_key,
+                                }).url}
+                            >
+                                <Download data-icon="inline-start" />
+                                {actionLabel}
+                            </Link>
+                        </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="rounded-xl"
+                                    aria-label={`${item.name} 的更多操作`}
+                                >
+                                    <EllipsisVertical className="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                className="w-36"
+                            >
+                                <DropdownMenuItem disabled>
+                                    <PencilLine className="size-4" />
+                                    编辑
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    disabled
+                                    variant="destructive"
+                                >
+                                    <Trash2 className="size-4" />
+                                    删除
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
             </div>
         </div>
@@ -407,17 +481,16 @@ function MetaPill({
     labelClassName?: string;
 }) {
     return (
-        <span
-            className={[
-                'inline-flex min-w-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium leading-none',
+        <Badge
+            variant="outline"
+            className={cn(
+                'h-auto min-w-0 rounded-full px-3 py-1.5 text-sm font-medium leading-none',
                 className,
-            ]
-                .filter(Boolean)
-                .join(' ')}
+            )}
         >
             <Icon className="size-3.5 shrink-0" />
-            <span className={labelClassName}>{label}</span>
-        </span>
+            <span className={cn('truncate', labelClassName)}>{label}</span>
+        </Badge>
     );
 }
 

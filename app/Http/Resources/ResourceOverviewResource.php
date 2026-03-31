@@ -33,7 +33,7 @@ class ResourceOverviewResource extends JsonResource
             'publishedAt' => $this->published_at?->toAtomString(),
             'publishedLabel' => $this->formatDateLabel($this->published_at),
             'updatedAt' => $this->updated_at?->toAtomString(),
-            'updatedLabel' => $this->updated_at?->locale('zh_CN')->diffForHumans(),
+            'updatedLabel' => $this->formatRelativeLabel($this->updated_at?->locale('zh_CN')->diffForHumans()),
             'tags' => array_values($this->tags ?? []),
         ];
     }
@@ -58,5 +58,14 @@ class ResourceOverviewResource extends JsonResource
     private function formatDateLabel(mixed $value): ?string
     {
         return $value?->format('Y-m-d');
+    }
+
+    private function formatRelativeLabel(?string $value): ?string
+    {
+        if (! is_string($value) || $value === '') {
+            return $value;
+        }
+
+        return preg_replace('/(\d+)(?=\p{Han})/u', '$1 ', $value) ?? $value;
     }
 }

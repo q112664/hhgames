@@ -4,7 +4,7 @@ import LatestResourcesGrid from '@/components/latest-resources-grid';
 import SiteFooter from '@/components/site-footer';
 import type { ResourceCardData } from '@/types';
 
-export default function Welcome({
+export default function Home({
     canRegister = true,
     latestResources,
     resourcesIndexUrl,

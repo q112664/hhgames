@@ -68,6 +68,9 @@ export default function ResourceShow({
                     <ResourceOverviewCard resource={resource} />
                     <ResourceDetailSections
                         resourceSlug={resource.slug}
+                        resourceCategory={resource.category}
+                        resourceDownloads={resource.stats.downloads}
+                        resourcePublishedLabel={resource.publishedLabel}
                         section={section}
                         sectionData={sectionData}
                     />
