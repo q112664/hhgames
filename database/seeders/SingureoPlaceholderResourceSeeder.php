@@ -81,7 +81,9 @@ class SingureoPlaceholderResourceSeeder extends Seeder
                 [
                     'user_id' => $owner->id,
                     'title' => $entry['title'],
-                    'subtitle' => $entry['subtitle'],
+                    'subtitle' => is_string($entry['subtitle'] ?? null)
+                        ? str_replace('Singureo 示例导入', 'Singureo', $entry['subtitle'])
+                        : null,
                     'category' => $entry['category'],
                     'content_rating' => $entry['content_rating'],
                     'cover_path' => $coverPath,
@@ -93,7 +95,7 @@ class SingureoPlaceholderResourceSeeder extends Seeder
                     'basic_info' => $entry['basic_info'],
                     'files' => [
                         [
-                            'name' => '原站条目整理',
+                            'name' => '',
                             'platform' => '示例数据',
                             'language' => '公开页面整理',
                             'size' => '信息页',
@@ -105,7 +107,7 @@ class SingureoPlaceholderResourceSeeder extends Seeder
                                 'avatar' => $owner->avatar,
                             ],
                             'action_label' => '查看',
-                            'status' => '示例导入',
+                            'status' => '',
                         ],
                     ],
                     'screenshots' => $screenshots,

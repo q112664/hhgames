@@ -14,9 +14,18 @@ Route::get('resources/{resource:slug}/files/create', [ResourceFileController::cl
     ->middleware('auth')
     ->name('resources.files.create');
 Route::get('resources/{resource:slug}/files', [ResourceController::class, 'files'])->name('resources.files');
+Route::get('resources/{resource:slug}/files/{entry}/edit', [ResourceFileController::class, 'edit'])
+    ->middleware('auth')
+    ->name('resources.files.edit');
 Route::post('resources/{resource:slug}/files', [ResourceFileController::class, 'store'])
     ->middleware('auth')
     ->name('resources.files.store');
+Route::patch('resources/{resource:slug}/files/{entry}', [ResourceFileController::class, 'update'])
+    ->middleware('auth')
+    ->name('resources.files.update');
+Route::delete('resources/{resource:slug}/files/{entry}', [ResourceFileController::class, 'destroy'])
+    ->middleware('auth')
+    ->name('resources.files.destroy');
 Route::get('resources/{resource:slug}/screenshots', [ResourceController::class, 'screenshots'])->name('resources.screenshots');
 Route::get('resources/{resource:slug}/comments', [ResourceController::class, 'comments'])->name('resources.comments');
 Route::post('resources/{resource:slug}/favorite', [ResourceController::class, 'favorite'])

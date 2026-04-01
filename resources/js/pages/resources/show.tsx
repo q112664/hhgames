@@ -69,7 +69,6 @@ export default function ResourceShow({
                     <ResourceDetailSections
                         resourceSlug={resource.slug}
                         resourceCategory={resource.category}
-                        resourceDownloads={resource.stats.downloads}
                         resourcePublishedLabel={resource.publishedLabel}
                         section={section}
                         sectionData={sectionData}

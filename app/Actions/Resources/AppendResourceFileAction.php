@@ -17,8 +17,10 @@ class AppendResourceFileAction
     {
         $files = array_values($resource->files ?? []);
         $uploadedAt = $resource->published_at?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $entryKey = 'entry-'.(count($files) + 1);
 
         $files[] = [
+            'entry_key' => $entryKey,
             'name' => $resource->title,
             'status' => '可下载',
             'platform' => trim((string) $data['platform']),
@@ -30,6 +32,7 @@ class AppendResourceFileAction
             'download_detail' => $this->nullableString($data['download_detail'] ?? null),
             'download_url' => $this->nullableString($data['download_url'] ?? null),
             'uploader' => [
+                'id' => $user->getKey(),
                 'name' => $user->name,
                 'avatar' => $user->avatar,
             ],
@@ -40,7 +43,7 @@ class AppendResourceFileAction
             'files' => $files,
         ])->save();
 
-        return 'entry-'.count($files);
+        return $entryKey;
     }
 
     private function nullableString(mixed $value): ?string

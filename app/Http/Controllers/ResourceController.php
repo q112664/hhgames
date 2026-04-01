@@ -283,7 +283,9 @@ class ResourceController extends Controller
     {
         return array_map(
             fn (array $file, int $index): array => [
-                'entry_key' => 'entry-'.($index + 1),
+                'entry_key' => isset($file['entry_key']) && is_string($file['entry_key']) && trim($file['entry_key']) !== ''
+                    ? trim($file['entry_key'])
+                    : 'entry-'.($index + 1),
                 'name' => $file['name'] ?? '资源文件',
                 'status' => $file['status'] ?? '可查看',
                 'platform' => $file['platform']
@@ -303,6 +305,8 @@ class ResourceController extends Controller
                     : null,
                 'download_url' => $this->resolveDownloadUrl($file),
                 'uploader' => [
+                    'id' => $file['uploader']['id']
+                        ?? $resource->user?->getKey(),
                     'name' => $file['uploader']['name']
                         ?? $resource->user?->name
                         ?? '匿名上传者',

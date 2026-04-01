@@ -243,7 +243,7 @@ class SingureoScraper
     private function buildSubtitle(string $category, array $tags): string
     {
         $parts = array_values(array_filter([
-            'Singureo 示例导入',
+            'Singureo',
             $category,
             ...array_slice($tags, 0, 2),
         ]));

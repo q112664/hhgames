@@ -1,8 +1,6 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import {
     Box,
-    Cloud,
-    Clock3,
     Download,
     EllipsisVertical,
     FileImage,
@@ -19,6 +17,7 @@ import Lightbox from 'yet-another-react-lightbox';
 import DownloadPlugin from 'yet-another-react-lightbox/plugins/download';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import 'yet-another-react-lightbox/styles.css';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -28,6 +27,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useInitials } from '@/hooks/use-initials';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import resources from '@/routes/resources';
@@ -59,14 +59,12 @@ const sectionItems = [
 export default function ResourceDetailSections({
     resourceSlug,
     resourceCategory,
-    resourceDownloads,
     resourcePublishedLabel,
     section,
     sectionData,
 }: {
     resourceSlug: string;
     resourceCategory: string;
-    resourceDownloads: string;
     resourcePublishedLabel: string | null;
     section: ResourceDetailSection;
     sectionData:
@@ -126,7 +124,6 @@ export default function ResourceDetailSections({
                         <FilesPanel
                             resourceSlug={resourceSlug}
                             resourceCategory={resourceCategory}
-                            resourceDownloads={resourceDownloads}
                             resourcePublishedLabel={resourcePublishedLabel}
                             sectionData={sectionData}
                         />
@@ -215,13 +212,11 @@ function escapeHtml(content: string) {
 function FilesPanel({
     resourceSlug,
     resourceCategory,
-    resourceDownloads,
     resourcePublishedLabel,
     sectionData,
 }: {
     resourceSlug: string;
     resourceCategory: string;
-    resourceDownloads: string;
     resourcePublishedLabel: string | null;
     sectionData: ResourceFilesSectionData;
 }) {
@@ -264,7 +259,6 @@ function FilesPanel({
                             key={`${item.entry_key}-${item.name}-${index}`}
                             resourceSlug={resourceSlug}
                             resourceCategory={resourceCategory}
-                            resourceDownloads={resourceDownloads}
                             resourcePublishedLabel={resourcePublishedLabel}
                             item={item}
                         />
@@ -378,114 +372,164 @@ function EmptyPanel({ text }: { text: string }) {
 function DownloadListRow({
     resourceSlug,
     resourceCategory,
-    resourceDownloads,
     resourcePublishedLabel,
     item,
 }: {
     resourceSlug: string;
     resourceCategory: string;
-    resourceDownloads: string;
     resourcePublishedLabel: string | null;
     item: ResourceFilesSectionData['files'][number];
 }) {
-    const actionLabel =
-        item.action_label === '查看' ? '下载资源' : item.action_label;
+    const { auth } = usePage().props;
+    const publishedLabel = item.uploaded_at || resourcePublishedLabel || '未知';
+    const actionTargetLabel = sanitizePlaceholderValue(item.name) ?? '该资源';
+    const getInitials = useInitials();
+    const canManageFile = Boolean(auth.user?.is_admin);
+    const downloadUrl = resources.download({
+        resource: resourceSlug,
+        entry: item.entry_key,
+    }).url;
+    const editUrl = `/resources/${resourceSlug}/files/${item.entry_key}/edit`;
+    const deleteUrl = `/resources/${resourceSlug}/files/${item.entry_key}`;
 
     return (
         <div className="rounded-2xl border border-border/70 bg-card/70 px-3 py-3 sm:px-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <MetaPill
-                        icon={Box}
-                        label={resourceCategory}
-                        className="max-w-full border-primary/15 bg-primary/[0.08] text-primary"
-                    />
-                    <MetaPill
-                        icon={HardDrive}
-                        label={item.size}
-                        className="border-amber-500/20 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300"
-                    />
-                    <MetaPill
-                        icon={Monitor}
-                        label={item.platform}
-                        className="border-emerald-500/20 bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300"
-                    />
-                    <MetaPill
-                        icon={Tag}
-                        label={item.language}
-                        className="border-pink-500/20 bg-pink-500/[0.08] text-pink-700 dark:text-pink-300"
-                    />
+            <div className="space-y-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex w-full items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                            <MetaPill
+                                icon={Box}
+                                label={resourceCategory}
+                                className="max-w-full border-primary/15 bg-primary/[0.08] text-primary"
+                            />
+                            <MetaPill
+                                icon={HardDrive}
+                                label={item.size}
+                                className="border-amber-500/20 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300"
+                            />
+                            <MetaPill
+                                icon={Monitor}
+                                label={item.platform}
+                                className="border-emerald-500/20 bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300"
+                            />
+                            <MetaPill
+                                icon={Tag}
+                                label={item.language}
+                                className="border-pink-500/20 bg-pink-500/[0.08] text-pink-700 dark:text-pink-300"
+                            />
+                        </div>
+
+                        {canManageFile ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        className="shrink-0 rounded-xl text-muted-foreground"
+                                        aria-label={`${actionTargetLabel} 的更多操作`}
+                                    >
+                                        <EllipsisVertical className="size-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className="w-36"
+                                >
+                                    <DropdownMenuItem asChild>
+                                        <Link href={editUrl}>
+                                            <PencilLine className="size-4" />
+                                            编辑
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        onSelect={(event) => {
+                                            event.preventDefault();
+
+                                            if (
+                                                !window.confirm(
+                                                    `确认删除“${actionTargetLabel}”吗？`,
+                                                )
+                                            ) {
+                                                return;
+                                            }
+
+                                            router.delete(deleteUrl, {
+                                                preserveScroll: true,
+                                            });
+                                        }}
+                                    >
+                                        <Trash2 className="size-4" />
+                                        删除
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : null}
+                    </div>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between lg:flex-none lg:gap-4 lg:border-t-0 lg:pt-0">
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                        <span className="inline-flex items-center gap-1.5 font-medium text-foreground/85">
-                            <Cloud className="size-4" />
-                            夸克网盘
-                        </span>
-                        <span className="inline-flex items-center gap-1.5">
-                            <Clock3 className="size-4" />
-                            {resourcePublishedLabel ?? '未知'}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5">
-                            <Download className="size-4" />
-                            {resourceDownloads}
-                        </span>
+                <div className="flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2 border-t border-border/60 pt-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <Avatar size="default" className="size-[37px]">
+                            <AvatarImage
+                                src={item.uploader.avatar ?? undefined}
+                                alt={item.uploader.name}
+                            />
+                            <AvatarFallback className="bg-muted text-xs font-medium text-foreground">
+                                {getInitials(item.uploader.name)}
+                            </AvatarFallback>
+                        </Avatar>
+
+                        <div className="min-w-0">
+                            <div className="flex min-w-0 flex-col gap-1">
+                                <p className="truncate text-sm font-medium leading-none text-foreground/95">
+                                    {item.uploader.name}
+                                </p>
+                                <p className="text-xs leading-none text-muted-foreground">
+                                    <span className="truncate">
+                                        发布于 {publishedLabel}
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:justify-end">
-                        <Button
-                            asChild
-                            type="button"
-                            size="sm"
-                            className="h-9 rounded-xl px-4"
-                        >
-                            <Link
-                                href={resources.download({
-                                    resource: resourceSlug,
-                                    entry: item.entry_key,
-                                }).url}
-                            >
-                                <Download data-icon="inline-start" />
-                                {actionLabel}
-                            </Link>
-                        </Button>
-
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="rounded-xl"
-                                    aria-label={`${item.name} 的更多操作`}
-                                >
-                                    <EllipsisVertical className="size-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                align="end"
-                                className="w-36"
-                            >
-                                <DropdownMenuItem disabled>
-                                    <PencilLine className="size-4" />
-                                    编辑
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    disabled
-                                    variant="destructive"
-                                >
-                                    <Trash2 className="size-4" />
-                                    删除
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+                    <Link
+                        href={downloadUrl}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#FB7299]/20 bg-[#FB7299]/10 px-3 py-1.5 text-xs font-medium leading-none text-[#FB7299] transition-colors hover:bg-[#FB7299]/15 hover:text-[#FB7299] dark:border-[#FB7299]/30 dark:bg-[#FB7299]/14 dark:hover:bg-[#FB7299]/20"
+                    >
+                        <Download className="size-[18px]" />
+                        <span>下载资源</span>
+                    </Link>
                 </div>
             </div>
         </div>
     );
 }
+
+function normalizePassword(value?: string | null) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const normalized = value.trim();
+
+    return normalized !== '' ? normalized : null;
+}
+
+function sanitizePlaceholderValue(value?: string | null) {
+    const normalized = normalizePassword(value);
+
+    if (normalized === null) {
+        return null;
+    }
+
+    return PLACEHOLDER_FILE_VALUES.has(normalized) ? null : normalized;
+}
+
+const PLACEHOLDER_FILE_VALUES = new Set(['原站条目整理', '示例导入']);
 
 function MetaPill({
     icon: Icon,

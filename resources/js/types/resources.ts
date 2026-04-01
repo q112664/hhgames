@@ -62,6 +62,7 @@ export type ResourceFileItem = {
     download_detail?: string | null;
     download_url?: string | null;
     uploader: {
+        id?: number | null;
         name: string;
         avatar: string | null;
     };

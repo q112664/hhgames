@@ -557,7 +557,7 @@ test('resource screenshots section uses thumbnails for the list and original ima
     expect(Storage::disk('public')->exists($thumbnailPath))->toBeTrue();
 });
 
-test('resource detail files section can be viewed by dedicated route', function () {
+test('resource detail files section can be viewed by files route', function () {
     $resource = Resource::factory()->create([
         'slug' => 'virtual-files',
         'files' => [
@@ -567,6 +567,8 @@ test('resource detail files section can be viewed by dedicated route', function 
                 'language' => '简体中文',
                 'size' => '8.2 GB',
                 'code' => 'HX92LK18QP',
+                'extract_code' => 'QK8M',
+                'download_url' => 'https://pan.quark.cn/s/example-download',
                 'uploaded_at' => '今天 21:18',
                 'download_detail' => '请先阅读目录内说明文件，再进行解压。',
                 'uploader' => [
@@ -594,6 +596,8 @@ test('resource detail files section can be viewed by dedicated route', function 
             ->where('sectionData.files.0.language', '简体中文')
             ->where('sectionData.files.0.size', '8.2 GB')
             ->where('sectionData.files.0.code', 'HX92LK18QP')
+            ->where('sectionData.files.0.extract_code', 'QK8M')
+            ->where('sectionData.files.0.download_url', 'https://pan.quark.cn/s/example-download')
             ->where('sectionData.files.0.download_detail', '请先阅读目录内说明文件，再进行解压。')
             ->where('sectionData.files.0.uploader.name', 'Palentum')
             ->missing('sectionData.description'),
@@ -639,68 +643,7 @@ test('resource download page can be viewed for a specific file', function () {
             ->where('download.name', '游戏本体')
             ->where('download.code', 'AB12CD34EF')
             ->where('download.extract_code', 'QK8M')
-            ->where('download.download_url', 'https://pan.quark.cn/s/example-download')
-            ->where('download.download_detail', '这是一个下载详情占位。'),
-        );
-});
-
-test('resource download page does not fabricate missing passwords', function () {
-    $resource = Resource::factory()->create([
-        'title' => '下载密码逻辑测试页',
-        'slug' => 'download-password-logic',
-        'files' => [
-            [
-                'name' => '免密资源',
-                'platform' => 'Windows',
-                'language' => '简体中文',
-                'size' => '2.1 GB',
-                'download_url' => 'https://pan.quark.cn/s/no-password',
-                'uploaded_at' => '今天 20:12',
-                'download_detail' => '当前条目没有提供任何密码。',
-                'uploader' => [
-                    'name' => 'Test User',
-                    'avatar' => null,
-                ],
-            ],
-            [
-                'name' => '仅提取密码资源',
-                'platform' => 'Windows',
-                'language' => '简体中文',
-                'size' => '3.3 GB',
-                'extract_code' => 'QK22',
-                'download_url' => 'https://pan.quark.cn/s/extract-only',
-                'uploaded_at' => '今天 20:16',
-                'uploader' => [
-                    'name' => 'Test User',
-                    'avatar' => null,
-                ],
-            ],
-        ],
-    ]);
-
-    $this->get(route('resources.download', [
-        'resource' => $resource->slug,
-        'entry' => 'entry-1',
-    ]))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('resources/download')
-            ->where('download.name', '免密资源')
-            ->where('download.code', null)
-            ->where('download.extract_code', null),
-        );
-
-    $this->get(route('resources.download', [
-        'resource' => $resource->slug,
-        'entry' => 'entry-2',
-    ]))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('resources/download')
-            ->where('download.name', '仅提取密码资源')
-            ->where('download.code', null)
-            ->where('download.extract_code', 'QK22'),
-        );
+            ->where('download.download_url', 'https://pan.quark.cn/s/example-download'));
 });
 
 test('admin can view the resource file creation page', function () {
@@ -738,6 +681,74 @@ test('non-admin users cannot access the resource file creation page', function (
     $this->actingAs($user)
         ->get(route('resources.files.create', [
             'resource' => $resource->slug,
+        ]))
+        ->assertForbidden();
+});
+
+test('admin can view the resource file edit page', function () {
+    $user = User::factory()->create([
+        'is_admin' => true,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'title' => '条目编辑测试资源',
+        'slug' => 'file-edit-resource',
+        'files' => [
+            [
+                'entry_key' => 'entry-1',
+                'name' => '原始资源',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '2.4 GB',
+                'code' => 'EDIT123',
+                'extract_code' => 'QK8M',
+                'download_url' => 'https://pan.quark.cn/s/edit-source',
+                'download_detail' => '原始备注',
+                'uploaded_at' => '2026-03-30',
+                'uploader' => [
+                    'name' => '资源管理员',
+                    'avatar' => null,
+                ],
+            ],
+        ],
+    ]);
+
+    $response = $this->actingAs($user)->get(route('resources.files.edit', [
+        'resource' => $resource->slug,
+        'entry' => 'entry-1',
+    ]));
+
+    $response
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('resources/file-edit')
+            ->where('resource.slug', 'file-edit-resource')
+            ->where('file.entry_key', 'entry-1')
+            ->where('file.size', '2.4 GB')
+            ->where('file.download_detail', '原始备注'));
+});
+
+test('non-admin users cannot access the resource file edit page', function () {
+    $user = User::factory()->create([
+        'is_admin' => false,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'slug' => 'forbidden-file-edit',
+        'files' => [
+            [
+                'entry_key' => 'entry-1',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '1.0 GB',
+            ],
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('resources.files.edit', [
+            'resource' => $resource->slug,
+            'entry' => 'entry-1',
         ]))
         ->assertForbidden();
 });
@@ -810,6 +821,107 @@ test('admin can append a downloadable file to an existing resource', function ()
             ->where('download.extract_code', 'QK8M')
             ->where('download.download_url', 'https://pan.quark.cn/s/new-entry')
             ->where('download.download_detail', '先覆盖补丁，再重新启动游戏。'));
+});
+
+test('admin can update an existing downloadable file entry', function () {
+    $user = User::factory()->create([
+        'is_admin' => true,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'title' => '可编辑资源测试',
+        'slug' => 'editable-resource',
+        'files' => [
+            [
+                'entry_key' => 'entry-1',
+                'name' => '原始资源',
+                'status' => '可下载',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '1.2 GB',
+                'code' => 'OLD123',
+                'extract_code' => 'ABCD',
+                'download_url' => 'https://pan.quark.cn/s/original',
+                'download_detail' => '旧备注',
+                'uploaded_at' => '2026-03-30',
+                'uploader' => [
+                    'name' => '资源管理员',
+                    'avatar' => null,
+                ],
+                'action_label' => '查看',
+            ],
+        ],
+    ]);
+
+    $response = $this->actingAs($user)->patch(route('resources.files.update', [
+        'resource' => $resource->slug,
+        'entry' => 'entry-1',
+    ]), [
+        'platform' => '安卓',
+        'language' => '日语',
+        'size' => '768 MB',
+        'code' => 'NEW456',
+        'extract_code' => 'ZXCV',
+        'download_url' => 'https://pan.quark.cn/s/updated',
+        'download_detail' => '更新后的备注信息',
+    ]);
+
+    $response->assertRedirect(route('resources.files', [
+        'resource' => 'editable-resource',
+    ]));
+
+    $resource->refresh();
+
+    expect($resource->files[0])->toMatchArray([
+        'entry_key' => 'entry-1',
+        'platform' => '安卓',
+        'language' => '日语',
+        'size' => '768 MB',
+        'code' => 'NEW456',
+        'extract_code' => 'ZXCV',
+        'download_url' => 'https://pan.quark.cn/s/updated',
+        'download_detail' => '更新后的备注信息',
+    ]);
+});
+
+test('admin can delete an existing downloadable file entry', function () {
+    $user = User::factory()->create([
+        'is_admin' => true,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'slug' => 'removable-resource',
+        'files' => [
+            [
+                'entry_key' => 'entry-1',
+                'name' => '待删除资源',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '1.0 GB',
+            ],
+            [
+                'entry_key' => 'entry-2',
+                'name' => '保留资源',
+                'platform' => '安卓',
+                'language' => '日语',
+                'size' => '800 MB',
+            ],
+        ],
+    ]);
+
+    $response = $this->actingAs($user)->delete(route('resources.files.destroy', [
+        'resource' => $resource->slug,
+        'entry' => 'entry-1',
+    ]));
+
+    $response->assertRedirect(route('resources.files', [
+        'resource' => 'removable-resource',
+    ]));
+
+    $resource->refresh();
+
+    expect($resource->files)->toHaveCount(1);
+    expect($resource->files[0]['name'])->toBe('保留资源');
 });
 
 test('resource download page returns 404 for missing file code', function () {
