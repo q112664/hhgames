@@ -21,7 +21,9 @@ export default function LatestResourcesGrid({
                 </h2>
 
                 <Button asChild variant="outline" className="shrink-0">
-                    <Link href={viewAllHref}>查看全部资源</Link>
+                    <Link href={viewAllHref} prefetch>
+                        查看全部资源
+                    </Link>
                 </Button>
             </div>
 
@@ -31,8 +33,12 @@ export default function LatestResourcesGrid({
                 </div>
             ) : (
                 <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
-                    {resources.map((resource) => (
-                        <ResourceCard key={resource.slug} resource={resource} />
+                    {resources.map((resource, index) => (
+                        <ResourceCard
+                            key={resource.slug}
+                            resource={resource}
+                            priority={index < 4}
+                        />
                     ))}
                 </div>
             )}

@@ -184,6 +184,49 @@ test('resource index page paginates results', function () {
         );
 });
 
+test('resource index filter options refresh after category and tag changes', function () {
+    Resource::factory()->create([
+        'title' => '首个分类资源',
+        'slug' => 'first-filter-resource',
+        'category' => 'AVG',
+        'tags' => ['汉化资源'],
+    ]);
+
+    $this->get(route('resources.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filterOptions.categories', ['AVG'])
+            ->where('filterOptions.tags', ['汉化资源']));
+
+    Resource::factory()->create([
+        'title' => '第二个分类资源',
+        'slug' => 'second-filter-resource',
+        'category' => 'RPG',
+        'tags' => ['全年龄向'],
+    ]);
+
+    $this->get(route('resources.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filterOptions.categories', ['AVG', 'RPG'])
+            ->where('filterOptions.tags', ['全年龄向', '汉化资源']));
+});
+
+test('site settings current cache refreshes after update', function () {
+    $siteSetting = SiteSetting::query()->create([
+        'site_name' => 'Original Name',
+        'site_url' => 'https://original.test',
+    ]);
+
+    expect(SiteSetting::current()->site_name)->toBe('Original Name');
+
+    $siteSetting->update([
+        'site_name' => 'Updated Name',
+    ]);
+
+    expect(SiteSetting::current()->site_name)->toBe('Updated Name');
+});
+
 test('resource index page returns an empty collection when no results match', function () {
     Resource::factory()->create([
         'title' => '现有资源',
@@ -791,10 +834,24 @@ test('admin can append a downloadable file to an existing resource', function ()
         'entry' => 'entry-2',
     ]));
 
-    $resource->refresh();
+    $appendedFiles = $resource->resourceFiles()
+        ->orderBy('id')
+        ->get();
 
-    expect($resource->files)->toHaveCount(2);
-    expect($resource->files[1])->toMatchArray([
+    expect($appendedFiles)->toHaveCount(2);
+    expect($appendedFiles[1]->only([
+        'name',
+        'status',
+        'platform',
+        'language',
+        'size',
+        'code',
+        'extract_code',
+        'uploaded_at',
+        'download_url',
+        'download_detail',
+        'action_label',
+    ]))->toMatchArray([
         'name' => '可追加资源测试',
         'status' => '可下载',
         'platform' => '安卓',
@@ -807,7 +864,7 @@ test('admin can append a downloadable file to an existing resource', function ()
         'download_detail' => '先覆盖补丁，再重新启动游戏。',
         'action_label' => '查看',
     ]);
-    expect($resource->files[1]['uploader']['name'])->toBe('资源管理员');
+    expect($appendedFiles[1]->uploader_name)->toBe('资源管理员');
 
     $this->get(route('resources.download', [
         'resource' => $resource->slug,
@@ -870,9 +927,20 @@ test('admin can update an existing downloadable file entry', function () {
         'resource' => 'editable-resource',
     ]));
 
-    $resource->refresh();
+    $updatedFile = $resource->resourceFiles()
+        ->where('entry_key', 'entry-1')
+        ->first();
 
-    expect($resource->files[0])->toMatchArray([
+    expect($updatedFile?->only([
+        'entry_key',
+        'platform',
+        'language',
+        'size',
+        'code',
+        'extract_code',
+        'download_url',
+        'download_detail',
+    ]))->toMatchArray([
         'entry_key' => 'entry-1',
         'platform' => '安卓',
         'language' => '日语',
@@ -918,10 +986,72 @@ test('admin can delete an existing downloadable file entry', function () {
         'resource' => 'removable-resource',
     ]));
 
-    $resource->refresh();
+    $remainingFiles = $resource->resourceFiles()
+        ->orderBy('id')
+        ->get();
 
-    expect($resource->files)->toHaveCount(1);
-    expect($resource->files[0]['name'])->toBe('保留资源');
+    expect($remainingFiles)->toHaveCount(1);
+    expect($remainingFiles[0]->name)->toBe('保留资源');
+});
+
+test('resource file entry keys do not get reused after deletion', function () {
+    $user = User::factory()->create([
+        'is_admin' => true,
+    ]);
+
+    $resource = Resource::factory()->create([
+        'title' => '条目键值测试资源',
+        'slug' => 'entry-key-resource',
+        'files' => [
+            [
+                'entry_key' => 'entry-1',
+                'name' => '旧资源一',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '1.0 GB',
+            ],
+            [
+                'entry_key' => 'entry-2',
+                'name' => '旧资源二',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => '2.0 GB',
+            ],
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->delete(route('resources.files.destroy', [
+            'resource' => $resource->slug,
+            'entry' => 'entry-1',
+        ]))
+        ->assertRedirect(route('resources.files', [
+            'resource' => $resource->slug,
+        ]));
+
+    $this->actingAs($user)
+        ->post(route('resources.files.store', [
+            'resource' => $resource->slug,
+        ]), [
+            'platform' => '安卓',
+            'language' => '日语',
+            'size' => '512 MB',
+            'code' => 'ENTRY003',
+            'extract_code' => 'QK8M',
+            'download_url' => 'https://pan.quark.cn/s/entry-3',
+            'download_detail' => '新的资源条目。',
+        ])
+        ->assertRedirect(route('resources.download', [
+            'resource' => $resource->slug,
+            'entry' => 'entry-3',
+        ]));
+
+    $entryKeys = $resource->resourceFiles()
+        ->orderBy('id')
+        ->pluck('entry_key')
+        ->all();
+
+    expect($entryKeys)->toBe(['entry-2', 'entry-3']);
 });
 
 test('resource download page returns 404 for missing file code', function () {

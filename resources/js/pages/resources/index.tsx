@@ -1,6 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
+import { startTransition, useMemo, useState } from 'react';
 import HomeNavbar from '@/components/home-navbar';
-import ResourceCard from '@/components/resource-card';
+import ResourceCard, { ResourceCardSkeleton } from '@/components/resource-card';
 import SiteFooter from '@/components/site-footer';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -11,6 +12,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import resources from '@/routes/resources';
 import type {
@@ -34,6 +36,38 @@ export default function ResourceIndex({
     filterOptions,
 }: ResourceIndexProps) {
     const { auth } = usePage().props;
+    const [pendingVisitType, setPendingVisitType] = useState<
+        'filters' | 'pagination' | null
+    >(null);
+
+    const transitionMessage =
+        pendingVisitType === 'pagination'
+            ? '正在切换分页...'
+            : pendingVisitType === 'filters'
+              ? '正在刷新筛选结果...'
+              : null;
+    const skeletonCount = useMemo(
+        () =>
+            Math.max(
+                paginatedResources.data.length > 0
+                    ? paginatedResources.data.length
+                    : 8,
+                4,
+            ),
+        [paginatedResources.data.length],
+    );
+
+    const beginListTransition = (type: 'filters' | 'pagination') => {
+        startTransition(() => {
+            setPendingVisitType(type);
+        });
+    };
+
+    const finishListTransition = () => {
+        startTransition(() => {
+            setPendingVisitType(null);
+        });
+    };
 
     const updateFilters = (
         nextFilters: Partial<ResourceListFilters>,
@@ -53,19 +87,25 @@ export default function ResourceIndex({
                     : filters.sort,
         };
 
+        beginListTransition('filters');
+
         router.get(resources.index.url({ query }), {}, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
+            onFinish: finishListTransition,
         });
     };
 
     const hasActiveFilters = filters.category !== null || filters.tag !== null;
 
     const navigateToPage = (url: string): void => {
+        beginListTransition('pagination');
+
         router.visit(url, {
             preserveScroll: false,
             preserveState: true,
+            onFinish: finishListTransition,
         });
     };
 
@@ -101,7 +141,21 @@ export default function ResourceIndex({
                             )}
                             {hasActiveFilters && (
                                 <Link
-                                    href={resources.index()}
+                                    href={
+                                        resources.index.url({
+                                            query: {
+                                                sort: filters.sort,
+                                            },
+                                        })
+                                    }
+                                    prefetch
+                                    onClick={(event) => {
+                                        event.preventDefault();
+                                        updateFilters({
+                                            category: null,
+                                            tag: null,
+                                        });
+                                    }}
                                     className="transition-colors hover:text-foreground"
                                 >
                                     清除筛选
@@ -110,7 +164,14 @@ export default function ResourceIndex({
                         </div>
                     </section>
 
-                    <section className="grid gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <section
+                        className={cn(
+                            'grid gap-3 rounded-2xl border bg-card p-4 transition-opacity',
+                            'sm:grid-cols-2 lg:grid-cols-3',
+                            pendingVisitType && 'pointer-events-none opacity-75',
+                        )}
+                        aria-busy={Boolean(pendingVisitType)}
+                    >
                         <div className="space-y-2">
                             <div className="text-sm font-medium">分类</div>
                             <Select
@@ -208,7 +269,24 @@ export default function ResourceIndex({
                         </div>
                     </section>
 
-                    {paginatedResources.data.length === 0 ? (
+                    {pendingVisitType ? (
+                        <section className="space-y-4" aria-live="polite">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1.5 text-sm text-muted-foreground">
+                                <Spinner className="size-3.5" />
+                                <span>{transitionMessage}</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
+                                {Array.from({ length: skeletonCount }).map(
+                                    (_, index) => (
+                                        <ResourceCardSkeleton
+                                            key={`resource-skeleton-${index}`}
+                                        />
+                                    ),
+                                )}
+                            </div>
+                        </section>
+                    ) : paginatedResources.data.length === 0 ? (
                         <section className="rounded-2xl border border-dashed px-6 py-16 text-center">
                             <h2 className="text-lg font-semibold">暂无匹配资源</h2>
                             <p className="mt-2 text-sm text-muted-foreground">
@@ -217,10 +295,11 @@ export default function ResourceIndex({
                         </section>
                     ) : (
                         <section className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
-                            {paginatedResources.data.map((resource) => (
+                            {paginatedResources.data.map((resource, index) => (
                                 <ResourceCard
                                     key={resource.slug}
                                     resource={resource}
+                                    priority={index < 4}
                                 />
                             ))}
                         </section>
@@ -235,6 +314,7 @@ export default function ResourceIndex({
                                 <Link
                                     key={`${link.label}-${index}`}
                                     href={link.url ?? '#'}
+                                    prefetch={Boolean(link.url)}
                                     onClick={(event) => {
                                         if (!link.url) {
                                             event.preventDefault();

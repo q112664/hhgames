@@ -12,11 +12,8 @@ import {
     Tag,
     Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
-import Lightbox from 'yet-another-react-lightbox';
-import DownloadPlugin from 'yet-another-react-lightbox/plugins/download';
-import Zoom from 'yet-another-react-lightbox/plugins/zoom';
-import 'yet-another-react-lightbox/styles.css';
+import { lazy, Suspense, useState } from 'react';
+import type { ResourceScreenshotsLightboxSlide } from '@/components/resource-screenshots-lightbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,8 +24,8 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useInitials } from '@/hooks/use-initials';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
 import resources from '@/routes/resources';
 import type {
@@ -55,6 +52,53 @@ const sectionItems = [
         icon: FileImage,
     },
 ] as const;
+const descriptionHtmlTagPattern = /<[a-z][\s\S]*>/i;
+const descriptionHtmlCache = new Map<string, string>();
+const allowedDescriptionTags = new Set([
+    'a',
+    'blockquote',
+    'br',
+    'code',
+    'del',
+    'em',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'hr',
+    'i',
+    'li',
+    'ol',
+    'p',
+    'pre',
+    'strong',
+    'u',
+    'ul',
+]);
+const removableDescriptionTags = new Set([
+    'embed',
+    'form',
+    'iframe',
+    'input',
+    'meta',
+    'object',
+    'script',
+    'select',
+    'style',
+    'textarea',
+]);
+const allowedDescriptionProtocols = new Set([
+    'http:',
+    'https:',
+    'mailto:',
+    'tel:',
+]);
+const screenshotPlaceholderCache = new Map<string, string>();
+const loadResourceScreenshotsLightbox = () =>
+    import('@/components/resource-screenshots-lightbox');
+const ResourceScreenshotsLightbox = lazy(loadResourceScreenshotsLightbox);
 
 export default function ResourceDetailSections({
     resourceSlug,
@@ -84,6 +128,29 @@ export default function ResourceDetailSections({
         }).url,
     } as const;
 
+    const prefetchSection = (nextSection: ResourceDetailSection) => {
+        if (nextSection === section) {
+            return;
+        }
+
+        const nextUrl = sectionUrls[nextSection];
+
+        if (!nextUrl) {
+            return;
+        }
+
+        router.prefetch(
+            nextUrl,
+            {
+                preserveScroll: true,
+                preserveState: false,
+            },
+            {
+                cacheFor: '1m',
+            },
+        );
+    };
+
     return (
         <Tabs
             value={section}
@@ -103,6 +170,12 @@ export default function ResourceDetailSections({
                     <TabsTrigger
                         key={value}
                         value={value}
+                        onMouseEnter={() =>
+                            prefetchSection(value as ResourceDetailSection)
+                        }
+                        onFocus={() =>
+                            prefetchSection(value as ResourceDetailSection)
+                        }
                         className="cursor-pointer"
                     >
                         <Icon className="size-3.5 shrink-0 sm:size-4" />
@@ -183,21 +256,154 @@ function DescriptionPanel({
 }
 
 function formatDescriptionContent(content: string) {
+    const cachedHtml = descriptionHtmlCache.get(content);
+
+    if (cachedHtml) {
+        return cachedHtml;
+    }
+
     const normalized = content.trim();
+    let formattedHtml: string;
 
     if (normalized === '') {
-        return '<p></p>';
+        formattedHtml = '<p></p>';
+        descriptionHtmlCache.set(content, formattedHtml);
+
+        return formattedHtml;
     }
 
-    if (/<[a-z][\s\S]*>/i.test(normalized)) {
-        return normalized;
+    if (descriptionHtmlTagPattern.test(normalized)) {
+        formattedHtml = sanitizeDescriptionHtml(normalized);
+        descriptionHtmlCache.set(content, formattedHtml);
+
+        return formattedHtml;
     }
 
-    return normalized
+    formattedHtml = formatPlainDescription(normalized);
+
+    descriptionHtmlCache.set(content, formattedHtml);
+
+    return formattedHtml;
+}
+
+function formatPlainDescription(content: string) {
+    return content
         .split(/\n{2,}/)
         .filter(Boolean)
         .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`)
         .join('');
+}
+
+function sanitizeDescriptionHtml(content: string) {
+    if (typeof DOMParser === 'undefined') {
+        return formatPlainDescription(content);
+    }
+
+    const parser = new DOMParser();
+    const document = parser.parseFromString(content, 'text/html');
+    const elements = Array.from(document.body.querySelectorAll('*'));
+
+    for (const element of elements) {
+        if (!element.isConnected) {
+            continue;
+        }
+
+        const tagName = element.tagName.toLowerCase();
+
+        if (removableDescriptionTags.has(tagName)) {
+            element.remove();
+            continue;
+        }
+
+        if (!allowedDescriptionTags.has(tagName)) {
+            unwrapElement(element);
+            continue;
+        }
+
+        sanitizeDescriptionElementAttributes(element);
+    }
+
+    const sanitizedHtml = document.body.innerHTML.trim();
+
+    return sanitizedHtml === '' ? '<p></p>' : sanitizedHtml;
+}
+
+function unwrapElement(element: Element) {
+    const parent = element.parentNode;
+
+    if (!parent) {
+        return;
+    }
+
+    while (element.firstChild) {
+        parent.insertBefore(element.firstChild, element);
+    }
+
+    parent.removeChild(element);
+}
+
+function sanitizeDescriptionElementAttributes(element: Element) {
+    for (const attribute of Array.from(element.attributes)) {
+        const attributeName = attribute.name.toLowerCase();
+
+        if (
+            element.tagName.toLowerCase() === 'a' &&
+            ['href', 'rel', 'target'].includes(attributeName)
+        ) {
+            continue;
+        }
+
+        element.removeAttribute(attribute.name);
+    }
+
+    if (element.tagName.toLowerCase() !== 'a') {
+        return;
+    }
+
+    const safeHref = sanitizeDescriptionHref(element.getAttribute('href'));
+
+    if (!safeHref) {
+        element.removeAttribute('href');
+        element.removeAttribute('target');
+        element.removeAttribute('rel');
+
+        return;
+    }
+
+    element.setAttribute('href', safeHref);
+
+    if (element.getAttribute('target') === '_blank') {
+        element.setAttribute('rel', 'noopener noreferrer');
+
+        return;
+    }
+
+    element.removeAttribute('target');
+    element.removeAttribute('rel');
+}
+
+function sanitizeDescriptionHref(href: string | null) {
+    const normalized = href?.trim();
+
+    if (!normalized) {
+        return null;
+    }
+
+    if (
+        normalized.startsWith('#') ||
+        (normalized.startsWith('/') && !normalized.startsWith('//')) ||
+        !/^[a-z][a-z0-9+.-]*:/i.test(normalized)
+    ) {
+        return normalized;
+    }
+
+    try {
+        const url = new URL(normalized);
+
+        return allowedDescriptionProtocols.has(url.protocol) ? normalized : null;
+    } catch {
+        return null;
+    }
 }
 
 function escapeHtml(content: string) {
@@ -242,7 +448,7 @@ function FilesPanel({
                         size="sm"
                         className="h-9 rounded-full px-4 sm:shrink-0"
                     >
-                        <Link href={createFileUrl}>
+                        <Link href={createFileUrl} prefetch>
                             <Plus data-icon="inline-start" />
                             添加资源
                         </Link>
@@ -254,12 +460,13 @@ function FilesPanel({
                 {sectionData.files.length === 0 ? (
                     <EmptyPanel text="当前还没有可展示的下载资源。" />
                 ) : (
-                    sectionData.files.map((item, index) => (
+                    sectionData.files.map((item) => (
                         <DownloadListRow
-                            key={`${item.entry_key}-${item.name}-${index}`}
+                            key={item.entry_key}
                             resourceSlug={resourceSlug}
                             resourceCategory={resourceCategory}
                             resourcePublishedLabel={resourcePublishedLabel}
+                            canManageFile={canManageResourceFiles}
                             item={item}
                         />
                     ))
@@ -275,16 +482,10 @@ function ScreenshotsPanel({
     sectionData: ResourceScreenshotsSectionData;
 }) {
     const [lightboxIndex, setLightboxIndex] = useState(-1);
-    const slides = sectionData.screenshots.map((item) => ({
-        src: item.image ?? createScreenshotPlaceholder(item.title),
-        alt: item.title,
-        download: item.image
-            ? {
-                  url: item.image,
-                  filename: item.title,
-              }
-            : undefined,
-    }));
+    const lightboxSlides =
+        lightboxIndex >= 0
+            ? createLightboxSlides(sectionData.screenshots)
+            : null;
 
     return (
         <div className="space-y-4">
@@ -305,7 +506,12 @@ function ScreenshotsPanel({
                         <button
                             key={item.title}
                             type="button"
-                            onClick={() => setLightboxIndex(index)}
+                            onMouseEnter={preloadResourceScreenshotsLightbox}
+                            onFocus={preloadResourceScreenshotsLightbox}
+                            onClick={() => {
+                                preloadResourceScreenshotsLightbox();
+                                setLightboxIndex(index);
+                            }}
                             className="overflow-hidden rounded-2xl border bg-card text-left transition-opacity hover:opacity-95"
                         >
                             <img
@@ -315,35 +521,55 @@ function ScreenshotsPanel({
                                 }
                                 alt={item.title}
                                 className="block aspect-[16/10] w-full object-cover"
+                                loading="lazy"
+                                decoding="async"
+                                sizes="(min-width: 1024px) 30vw, 50vw"
                             />
                         </button>
                     ))
                 )}
             </div>
 
-            <Lightbox
-                open={lightboxIndex >= 0}
-                index={lightboxIndex >= 0 ? lightboxIndex : 0}
-                close={() => setLightboxIndex(-1)}
-                on={{ view: ({ index }) => setLightboxIndex(index) }}
-                controller={{ closeOnBackdropClick: true }}
-                plugins={[DownloadPlugin, Zoom]}
-                styles={{
-                    container: {
-                        backgroundColor: 'rgba(15, 23, 42, 0.72)',
-                    },
-                }}
-                zoom={{
-                    maxZoomPixelRatio: 2.5,
-                    scrollToZoom: true,
-                }}
-                slides={slides}
-            />
+            {lightboxSlides ? (
+                <Suspense fallback={null}>
+                    <ResourceScreenshotsLightbox
+                        index={lightboxIndex}
+                        onClose={() => setLightboxIndex(-1)}
+                        onView={setLightboxIndex}
+                        slides={lightboxSlides}
+                    />
+                </Suspense>
+            ) : null}
         </div>
     );
 }
 
+function preloadResourceScreenshotsLightbox() {
+    void loadResourceScreenshotsLightbox();
+}
+
+function createLightboxSlides(
+    screenshots: ResourceScreenshotsSectionData['screenshots'],
+): ResourceScreenshotsLightboxSlide[] {
+    return screenshots.map((item) => ({
+        src: item.image ?? createScreenshotPlaceholder(item.title),
+        alt: item.title,
+        download: item.image
+            ? {
+                  url: item.image,
+                  filename: item.title,
+              }
+            : undefined,
+    }));
+}
+
 function createScreenshotPlaceholder(seed: string) {
+    const cachedPlaceholder = screenshotPlaceholderCache.get(seed);
+
+    if (cachedPlaceholder) {
+        return cachedPlaceholder;
+    }
+
     const palette = ['#dbeafe', '#f5d0fe', '#fde68a', '#bfdbfe'];
     const fill =
         palette[
@@ -358,7 +584,11 @@ function createScreenshotPlaceholder(seed: string) {
         </svg>
     `;
 
-    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    const placeholder = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+
+    screenshotPlaceholderCache.set(seed, placeholder);
+
+    return placeholder;
 }
 
 function EmptyPanel({ text }: { text: string }) {
@@ -373,18 +603,18 @@ function DownloadListRow({
     resourceSlug,
     resourceCategory,
     resourcePublishedLabel,
+    canManageFile,
     item,
 }: {
     resourceSlug: string;
     resourceCategory: string;
     resourcePublishedLabel: string | null;
+    canManageFile: boolean;
     item: ResourceFilesSectionData['files'][number];
 }) {
-    const { auth } = usePage().props;
     const publishedLabel = item.uploaded_at || resourcePublishedLabel || '未知';
     const actionTargetLabel = sanitizePlaceholderValue(item.name) ?? '该资源';
     const getInitials = useInitials();
-    const canManageFile = Boolean(auth.user?.is_admin);
     const downloadUrl = resources.download({
         resource: resourceSlug,
         entry: item.entry_key,
@@ -438,7 +668,7 @@ function DownloadListRow({
                                     className="w-36"
                                 >
                                     <DropdownMenuItem asChild>
-                                        <Link href={editUrl}>
+                                        <Link href={editUrl} prefetch>
                                             <PencilLine className="size-4" />
                                             编辑
                                         </Link>
@@ -476,6 +706,8 @@ function DownloadListRow({
                             <AvatarImage
                                 src={item.uploader.avatar ?? undefined}
                                 alt={item.uploader.name}
+                                loading="lazy"
+                                decoding="async"
                             />
                             <AvatarFallback className="bg-muted text-xs font-medium text-foreground">
                                 {getInitials(item.uploader.name)}
@@ -498,6 +730,7 @@ function DownloadListRow({
 
                     <Link
                         href={downloadUrl}
+                        prefetch
                         className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#FB7299]/20 bg-[#FB7299]/10 px-3 py-1.5 text-xs font-medium leading-none text-[#FB7299] transition-colors hover:bg-[#FB7299]/15 hover:text-[#FB7299] dark:border-[#FB7299]/30 dark:bg-[#FB7299]/14 dark:hover:bg-[#FB7299]/20"
                     >
                         <Download className="size-[18px]" />

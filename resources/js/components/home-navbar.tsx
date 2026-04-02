@@ -5,6 +5,7 @@ import {
     Grid2x2,
     House,
     Link2,
+    type LucideIcon,
     LogIn,
     Menu,
     Moon,
@@ -53,6 +54,13 @@ type HomeNavbarProps = {
     user?: User | null;
 };
 
+type ResolvedSiteNavigationItem = SiteNavigationItem & {
+    hrefKey: string;
+    pathname: string;
+    queryString: string;
+    icon: LucideIcon;
+};
+
 const navbarButtonClass =
     'focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-transparent focus-visible:outline-none';
 
@@ -60,6 +68,21 @@ const mobileNavItemClass =
     'h-11 justify-start rounded-xl px-3 text-sm font-medium hover:bg-primary/10 hover:text-primary';
 
 const mobileNavItemActiveClass = 'bg-primary/10 text-primary hover:bg-primary/15';
+const fallbackNavigationItems: SiteNavigationItem[] = [
+    { label: '首页', href: '/', group: '站点入口' },
+    { label: '全部资源', href: '/resources', group: '站点入口' },
+    {
+        label: '最新资源',
+        href: '/resources?sort=latest',
+        group: '资源浏览',
+    },
+    {
+        label: '热门资源',
+        href: '/resources?sort=popular',
+        group: '资源浏览',
+    },
+];
+const preferredMobileNavGroupOrder: readonly string[] = ['站点入口', '资源浏览'];
 
 const appearanceItems: {
     value: Appearance;
@@ -172,75 +195,61 @@ function SiteBrand({ site }: { site: SiteConfig }) {
 }
 
 function normalizeMenuItems(items: SiteNavigationItem[]) {
-    return items.length > 0
-        ? items
-        : [
-              { label: '首页', href: '/', group: '站点入口' },
-              { label: '全部资源', href: '/resources', group: '站点入口' },
-              {
-                  label: '最新资源',
-                  href: '/resources?sort=latest',
-                  group: '资源浏览',
-              },
-              {
-                  label: '热门资源',
-                  href: '/resources?sort=popular',
-                  group: '资源浏览',
-              },
-          ];
+    return (items.length > 0 ? items : fallbackNavigationItems).map((item) => {
+        const itemUrl = new URL(item.href, 'http://localhost');
+        const pathname = itemUrl.pathname;
+        const queryString = itemUrl.searchParams.toString();
+        let icon: LucideIcon = Link2;
+
+        if (pathname === '/') {
+            icon = House;
+        } else if (
+            pathname === '/resources' &&
+            itemUrl.searchParams.get('sort') === 'latest'
+        ) {
+            icon = Compass;
+        } else if (
+            pathname === '/resources' &&
+            itemUrl.searchParams.get('sort') === 'popular'
+        ) {
+            icon = Flame;
+        } else if (pathname === '/resources' && queryString === '') {
+            icon = Grid2x2;
+        }
+
+        return {
+            ...item,
+            hrefKey: `${item.group}-${item.label}-${item.href}`,
+            pathname,
+            queryString,
+            icon,
+        };
+    });
 }
 
 function isItemActive(
-    item: SiteNavigationItem,
+    item: ResolvedSiteNavigationItem,
     pathname: string,
-    searchParams: URLSearchParams,
+    currentQuery: string,
 ) {
-    const itemUrl = new URL(item.href, 'http://localhost');
-    const itemPath = itemUrl.pathname;
-    const itemQuery = itemUrl.searchParams.toString();
-    const currentQuery = searchParams.toString();
-
-    if (itemPath === '/' && itemQuery === '') {
+    if (item.pathname === '/' && item.queryString === '') {
         return pathname === '/';
     }
 
-    if (itemPath === '/resources' && itemQuery === '') {
+    if (item.pathname === '/resources' && item.queryString === '') {
         return pathname === '/resources' && currentQuery === '';
     }
 
-    return pathname === itemPath && currentQuery === itemQuery;
+    return pathname === item.pathname && currentQuery === item.queryString;
 }
 
-function getMenuIcon(item: SiteNavigationItem) {
-    const itemUrl = new URL(item.href, 'http://localhost');
-
-    if (itemUrl.pathname === '/') {
-        return House;
-    }
-
-    if (itemUrl.pathname === '/resources' && itemUrl.searchParams.get('sort') === 'latest') {
-        return Compass;
-    }
-
-    if (itemUrl.pathname === '/resources' && itemUrl.searchParams.get('sort') === 'popular') {
-        return Flame;
-    }
-
-    if (itemUrl.pathname === '/resources' && itemUrl.search === '') {
-        return Grid2x2;
-    }
-
-    return Link2;
-}
-
-function buildMobileNavGroups(items: SiteNavigationItem[]) {
-    const preferredOrder = ['站点入口', '资源浏览'];
+function buildMobileNavGroups(items: ResolvedSiteNavigationItem[]) {
     const titles = [
-        ...preferredOrder.filter((group) =>
+        ...preferredMobileNavGroupOrder.filter((group) =>
             items.some((item) => item.group === group),
         ),
         ...Array.from(new Set(items.map((item) => item.group))).filter(
-            (group) => !preferredOrder.includes(group),
+            (group) => !preferredMobileNavGroupOrder.includes(group),
         ),
     ];
 
@@ -253,24 +262,24 @@ function buildMobileNavGroups(items: SiteNavigationItem[]) {
 function DesktopNavigation({
     items,
     pathname,
-    searchParams,
+    currentQuery,
 }: {
-    items: SiteNavigationItem[];
+    items: ResolvedSiteNavigationItem[];
     pathname: string;
-    searchParams: URLSearchParams;
+    currentQuery: string;
 }) {
     return (
         <nav className="hidden items-center lg:flex">
             <NavigationMenu viewport={false}>
                 <NavigationMenuList className="gap-1.5">
                     {items.map((item) => (
-                        <NavigationMenuItem key={`${item.group}-${item.label}-${item.href}`}>
+                        <NavigationMenuItem key={item.hrefKey}>
                             <Link
                                 href={item.href}
                                 className={cn(
                                     navigationMenuTriggerStyle(),
                                     navbarButtonClass,
-                                    isItemActive(item, pathname, searchParams) &&
+                                    isItemActive(item, pathname, currentQuery) &&
                                         'bg-muted text-foreground',
                                 )}
                             >
@@ -288,14 +297,14 @@ function MobileNavigation({
     canRegister,
     user,
     pathname,
-    searchParams,
+    currentQuery,
     site,
     items,
 }: Pick<HomeNavbarProps, 'canRegister' | 'user'> & {
     pathname: string;
-    searchParams: URLSearchParams;
+    currentQuery: string;
     site: SiteConfig;
-    items: SiteNavigationItem[];
+    items: ResolvedSiteNavigationItem[];
 }) {
     const groups = buildMobileNavGroups(items);
 
@@ -360,11 +369,11 @@ function MobileNavigation({
 
                                 <nav className="flex flex-col gap-1">
                                     {group.items.map((item) => {
-                                        const Icon = getMenuIcon(item);
+                                        const Icon = item.icon;
 
                                         return (
                                             <SheetClose
-                                                key={`${item.group}-${item.label}-${item.href}`}
+                                                key={item.hrefKey}
                                                 asChild
                                             >
                                                 <Button
@@ -376,7 +385,7 @@ function MobileNavigation({
                                                         isItemActive(
                                                             item,
                                                             pathname,
-                                                            searchParams,
+                                                            currentQuery,
                                                         ) &&
                                                             mobileNavItemActiveClass,
                                                     )}
@@ -476,7 +485,7 @@ export default function HomeNavbar({
     const page = usePage();
     const currentUrl = new URL(page.url, 'http://localhost');
     const pathname = currentUrl.pathname;
-    const searchParams = currentUrl.searchParams;
+    const currentQuery = currentUrl.searchParams.toString();
     const site = page.props.site;
     const navItems = normalizeMenuItems(site.navigation);
 
@@ -487,7 +496,7 @@ export default function HomeNavbar({
                     canRegister={canRegister}
                     user={user}
                     pathname={pathname}
-                    searchParams={searchParams}
+                    currentQuery={currentQuery}
                     site={site}
                     items={navItems}
                 />
@@ -505,7 +514,7 @@ export default function HomeNavbar({
                     <DesktopNavigation
                         items={navItems}
                         pathname={pathname}
-                        searchParams={searchParams}
+                        currentQuery={currentQuery}
                     />
                 </div>
 

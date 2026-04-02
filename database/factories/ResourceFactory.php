@@ -3,7 +3,9 @@
 namespace Database\Factories;
 
 use App\Models\Resource;
+use App\Models\ResourceFile;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -11,6 +13,53 @@ use Illuminate\Support\Str;
  */
 class ResourceFactory extends Factory
 {
+    public function configure(): static
+    {
+        return $this->afterCreating(function (Resource $resource): void {
+            $files = array_values($resource->files ?? []);
+
+            if ($files === []) {
+                return;
+            }
+
+            $resource->resourceFiles()->delete();
+
+            foreach ($files as $index => $file) {
+                if (! is_array($file)) {
+                    continue;
+                }
+
+                $uploader = is_array($file['uploader'] ?? null)
+                    ? $file['uploader']
+                    : [];
+
+                ResourceFile::query()->create([
+                    'resource_id' => $resource->getKey(),
+                    'uploader_id' => is_numeric($uploader['id'] ?? null)
+                        ? (int) $uploader['id']
+                        : $resource->user_id,
+                    'entry_key' => is_string($file['entry_key'] ?? null) && trim((string) $file['entry_key']) !== ''
+                        ? trim((string) $file['entry_key'])
+                        : 'entry-'.($index + 1),
+                    'name' => $this->nullableString($file['name'] ?? null) ?? '资源文件',
+                    'status' => $this->nullableString($file['status'] ?? null) ?? '可查看',
+                    'platform' => $this->nullableString($file['platform'] ?? null) ?? 'Windows',
+                    'language' => $this->nullableString($file['language'] ?? null) ?? '简体中文',
+                    'size' => $this->nullableString($file['size'] ?? null) ?? '未知大小',
+                    'code' => $this->nullableString($file['code'] ?? null),
+                    'extract_code' => $this->nullableString($file['extract_code'] ?? null),
+                    'uploaded_at' => $this->nullableString($file['uploaded_at'] ?? null)
+                        ?? Carbon::instance($resource->published_at ?? now())->format('Y-m-d'),
+                    'download_detail' => $this->nullableString($file['download_detail'] ?? null),
+                    'download_url' => $this->nullableString($file['download_url'] ?? null),
+                    'uploader_name' => $this->nullableString($uploader['name'] ?? null),
+                    'uploader_avatar' => $this->nullableString($uploader['avatar'] ?? null),
+                    'action_label' => $this->nullableString($file['action_label'] ?? null) ?? '查看',
+                ]);
+            }
+        });
+    }
+
     /**
      * Define the model's default state.
      *
@@ -77,5 +126,16 @@ class ResourceFactory extends Factory
             'rating_value' => fake()->randomFloat(1, 4.0, 9.5),
             'rating_breakdown_url' => null,
         ];
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+
+        return $normalized !== '' ? $normalized : null;
     }
 }

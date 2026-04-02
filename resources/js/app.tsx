@@ -8,16 +8,14 @@ import '../css/app.css';
 import { initializeTheme } from '@/hooks/use-appearance';
 
 let appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const pageModules = import.meta.glob('./pages/**/*.tsx');
 
 initializeTheme();
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) =>
-        resolvePageComponent(
-            `./pages/${name}.tsx`,
-            import.meta.glob('./pages/**/*.tsx'),
-        ),
+        resolvePageComponent(`./pages/${name}.tsx`, pageModules),
     setup({ el, App, props }) {
         appName =
             props.initialPage.props.site?.name ??

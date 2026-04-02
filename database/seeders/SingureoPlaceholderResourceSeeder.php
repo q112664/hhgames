@@ -93,23 +93,7 @@ class SingureoPlaceholderResourceSeeder extends Seeder
                     'tags' => $entry['tags'],
                     'platforms' => $entry['platforms'],
                     'basic_info' => $entry['basic_info'],
-                    'files' => [
-                        [
-                            'name' => '',
-                            'platform' => '示例数据',
-                            'language' => '公开页面整理',
-                            'size' => '信息页',
-                            'code' => strtoupper(Str::substr(md5($entry['slug']), 0, 10)),
-                            'uploaded_at' => '刚刚',
-                            'download_detail' => '该条目同步了标题、封面、部分介绍摘要和截图，用于本地示例展示，不提供原站下载内容。',
-                            'uploader' => [
-                                'name' => $owner->name,
-                                'avatar' => $owner->avatar,
-                            ],
-                            'action_label' => '查看',
-                            'status' => '',
-                        ],
-                    ],
+                    'files' => null,
                     'screenshots' => $screenshots,
                     'comments_preview' => [
                         [
@@ -126,6 +110,23 @@ class SingureoPlaceholderResourceSeeder extends Seeder
                     'rating_breakdown_url' => null,
                 ],
             );
+
+            $resource->resourceFiles()->delete();
+            $resource->resourceFiles()->create([
+                'uploader_id' => $owner->id,
+                'entry_key' => 'entry-1',
+                'name' => null,
+                'platform' => '示例数据',
+                'language' => '公开页面整理',
+                'size' => '信息页',
+                'code' => strtoupper(Str::substr(md5($entry['slug']), 0, 10)),
+                'uploaded_at' => '刚刚',
+                'download_detail' => '该条目同步了标题、封面、部分介绍摘要和截图，用于本地示例展示，不提供原站下载内容。',
+                'uploader_name' => $owner->name,
+                'uploader_avatar' => $owner->avatar,
+                'action_label' => '查看',
+                'status' => '示例数据',
+            ]);
 
             if ($coverPath !== null) {
                 $thumbnailService->ensureForPath($coverPath);

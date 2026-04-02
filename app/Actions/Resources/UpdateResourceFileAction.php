@@ -13,49 +13,23 @@ class UpdateResourceFileAction
      */
     public function handle(Resource $resource, string $entryKey, array $data): void
     {
-        $files = array_values($resource->files ?? []);
+        $file = $resource->resourceFiles()
+            ->where('entry_key', $entryKey)
+            ->first();
 
-        foreach ($files as $index => $file) {
-            if (! is_array($file)) {
-                continue;
-            }
-
-            $currentEntryKey = $this->resolveEntryKey($file, $index);
-
-            if ($currentEntryKey !== $entryKey) {
-                continue;
-            }
-
-            $files[$index] = [
-                ...$file,
-                'entry_key' => $currentEntryKey,
-                'platform' => trim((string) $data['platform']),
-                'language' => trim((string) $data['language']),
-                'size' => trim((string) $data['size']),
-                'code' => $this->nullableString($data['code'] ?? null),
-                'extract_code' => $this->nullableString($data['extract_code'] ?? null),
-                'download_url' => $this->nullableString($data['download_url'] ?? null),
-                'download_detail' => $this->nullableString($data['download_detail'] ?? null),
-            ];
-
-            $resource->forceFill([
-                'files' => $files,
-            ])->save();
-
+        if ($file === null) {
             return;
         }
-    }
 
-    /**
-     * @param  array<string, mixed>  $file
-     */
-    private function resolveEntryKey(array $file, int $index): string
-    {
-        $value = $file['entry_key'] ?? null;
-
-        return is_string($value) && trim($value) !== ''
-            ? trim($value)
-            : 'entry-'.($index + 1);
+        $file->forceFill([
+            'platform' => trim((string) $data['platform']),
+            'language' => trim((string) $data['language']),
+            'size' => trim((string) $data['size']),
+            'code' => $this->nullableString($data['code'] ?? null),
+            'extract_code' => $this->nullableString($data['extract_code'] ?? null),
+            'download_url' => $this->nullableString($data['download_url'] ?? null),
+            'download_detail' => $this->nullableString($data['download_detail'] ?? null),
+        ])->save();
     }
 
     private function nullableString(mixed $value): ?string

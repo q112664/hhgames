@@ -7,8 +7,10 @@ use App\Actions\Resources\RemoveResourceFileAction;
 use App\Actions\Resources\UpdateResourceFileAction;
 use App\Http\Requests\Resources\StoreResourceFileRequest;
 use App\Http\Requests\Resources\UpdateResourceFileRequest;
+use App\Http\Resources\ResourceFileResource;
 use App\Http\Resources\ResourceOverviewResource;
 use App\Models\Resource;
+use App\Models\ResourceFile;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -44,11 +46,11 @@ class ResourceFileController extends Controller
         $resource->loadMissing('user');
         $file = $this->findFileByEntry($resource, $entry);
 
-        abort_unless($file !== null, 404);
+        abort_unless($file instanceof ResourceFile, 404);
 
         return Inertia::render('resources/file-edit', [
             'resource' => (new ResourceOverviewResource($resource))->resolve(),
-            'file' => $file,
+            'file' => (new ResourceFileResource($file))->resolve(),
         ]);
     }
 
@@ -118,25 +120,12 @@ class ResourceFileController extends Controller
     }
 
     /**
-     * @return array<string, mixed>|null
      */
-    private function findFileByEntry(Resource $resource, string $entry): ?array
+    private function findFileByEntry(Resource $resource, string $entry): ?ResourceFile
     {
-        foreach (array_values($resource->files ?? []) as $index => $file) {
-            if (! is_array($file)) {
-                continue;
-            }
-
-            $entryKey = $file['entry_key'] ?? 'entry-'.($index + 1);
-
-            if ($entryKey === $entry) {
-                return [
-                    ...$file,
-                    'entry_key' => $entryKey,
-                ];
-            }
-        }
-
-        return null;
+        return $resource->resourceFiles()
+            ->with('uploader')
+            ->where('entry_key', $entry)
+            ->first();
     }
 }

@@ -15,11 +15,10 @@ class AppendResourceFileAction
      */
     public function handle(Resource $resource, User $user, array $data): string
     {
-        $files = array_values($resource->files ?? []);
-        $uploadedAt = $resource->published_at?->format('Y-m-d') ?? now()->format('Y-m-d');
-        $entryKey = 'entry-'.(count($files) + 1);
+        $entryKey = $resource->nextResourceFileEntryKey();
 
-        $files[] = [
+        $resource->resourceFiles()->create([
+            'uploader_id' => $user->getKey(),
             'entry_key' => $entryKey,
             'name' => $resource->title,
             'status' => '可下载',
@@ -28,20 +27,15 @@ class AppendResourceFileAction
             'size' => trim((string) $data['size']),
             'code' => $this->nullableString($data['code'] ?? null),
             'extract_code' => $this->nullableString($data['extract_code'] ?? null),
-            'uploaded_at' => Carbon::parse($uploadedAt)->format('Y-m-d'),
+            'uploaded_at' => Carbon::parse(
+                $resource->published_at ?? now(),
+            )->format('Y-m-d'),
             'download_detail' => $this->nullableString($data['download_detail'] ?? null),
             'download_url' => $this->nullableString($data['download_url'] ?? null),
-            'uploader' => [
-                'id' => $user->getKey(),
-                'name' => $user->name,
-                'avatar' => $user->avatar,
-            ],
+            'uploader_name' => $user->name,
+            'uploader_avatar' => $user->avatar,
             'action_label' => '查看',
-        ];
-
-        $resource->forceFill([
-            'files' => $files,
-        ])->save();
+        ]);
 
         return $entryKey;
     }

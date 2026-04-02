@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 #[Fillable([
@@ -15,6 +16,14 @@ use Illuminate\Support\Facades\Storage;
 ])]
 class SiteSetting extends Model
 {
+    private const CURRENT_CACHE_KEY = 'site-settings.current.attributes.v2';
+
+    protected static function booted(): void
+    {
+        static::saved(fn (): bool => Cache::forget(self::CURRENT_CACHE_KEY));
+        static::deleted(fn (): bool => Cache::forget(self::CURRENT_CACHE_KEY));
+    }
+
     /**
      * Get the attributes that should be cast.
      *
@@ -32,12 +41,27 @@ class SiteSetting extends Model
      */
     public static function current(): self
     {
-        return static::query()->find(1)
-            ?? new static([
-                'site_name' => config('app.name', 'Laravel'),
-                'site_url' => (string) config('app.url', url('/')),
-                'navbar_menu_items' => static::defaultNavbarMenuItems(),
-            ]);
+        $attributes = Cache::rememberForever(
+            self::CURRENT_CACHE_KEY,
+            fn (): array => static::query()->find(1)?->attributesToArray()
+                ?? [
+                    'site_name' => config('app.name', 'Laravel'),
+                    'site_url' => (string) config('app.url', url('/')),
+                    'navbar_menu_items' => static::defaultNavbarMenuItems(),
+                ],
+        );
+
+        if (array_key_exists('id', $attributes)) {
+            $model = new static();
+            $model->forceFill($attributes);
+            $model->exists = true;
+            $model->wasRecentlyCreated = false;
+            $model->syncOriginal();
+
+            return $model;
+        }
+
+        return new static($attributes);
     }
 
     /**

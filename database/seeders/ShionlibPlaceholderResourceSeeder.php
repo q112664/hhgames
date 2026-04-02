@@ -52,23 +52,7 @@ class ShionlibPlaceholderResourceSeeder extends Seeder
                         ['label' => '语言支持', 'value' => '简体中文 / 日文'],
                         ['label' => '资源来源', 'value' => 'Shionlib 示例抓取'],
                     ],
-                    'files' => [
-                        [
-                            'name' => '游戏本体',
-                            'platform' => 'Windows',
-                            'language' => '简体中文',
-                            'size' => $entry['size'],
-                            'code' => $entry['code'],
-                            'uploaded_at' => '刚刚',
-                            'download_detail' => '该条目为演示占位资源，封面和标题来自指定站点，其余下载信息为本地示例数据。',
-                            'uploader' => [
-                                'name' => $owner->name,
-                                'avatar' => $owner->avatar,
-                            ],
-                            'action_label' => '查看',
-                            'status' => '示例数据',
-                        ],
-                    ],
+                    'files' => null,
                     'screenshots' => $coverPath !== null
                         ? [
                             [
@@ -93,6 +77,23 @@ class ShionlibPlaceholderResourceSeeder extends Seeder
                     'rating_breakdown_url' => null,
                 ],
             );
+
+            $resource->resourceFiles()->delete();
+            $resource->resourceFiles()->create([
+                'uploader_id' => $owner->id,
+                'entry_key' => 'entry-1',
+                'name' => '游戏本体',
+                'platform' => 'Windows',
+                'language' => '简体中文',
+                'size' => $entry['size'],
+                'code' => $entry['code'],
+                'uploaded_at' => '刚刚',
+                'download_detail' => '该条目为演示占位资源，封面和标题来自指定站点，其余下载信息为本地示例数据。',
+                'uploader_name' => $owner->name,
+                'uploader_avatar' => $owner->avatar,
+                'action_label' => '查看',
+                'status' => '示例数据',
+            ]);
 
             if ($coverPath !== null) {
                 $thumbnailService->ensureForPath($coverPath);

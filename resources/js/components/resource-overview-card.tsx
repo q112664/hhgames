@@ -14,7 +14,16 @@ type FavoriteResponse = {
     favoritesCount: string;
 };
 
+const resourceCoverCache = new Map<string, string>();
+
 function createResourceCover(title: string, category: string) {
+    const cacheKey = `${title}::${category}`;
+    const cachedPlaceholder = resourceCoverCache.get(cacheKey);
+
+    if (cachedPlaceholder) {
+        return cachedPlaceholder;
+    }
+
     const palette = ['#dbeafe', '#fce7f3', '#fde68a', '#ddd6fe'];
     const seed = `${title}${category}`
         .split('')
@@ -26,7 +35,11 @@ function createResourceCover(title: string, category: string) {
         </svg>
     `;
 
-    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    const placeholder = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+
+    resourceCoverCache.set(cacheKey, placeholder);
+
+    return placeholder;
 }
 
 export default function ResourceOverviewCard({
@@ -53,6 +66,8 @@ export default function ResourceOverviewCard({
     const favoriteButtonLabel = isFavorited
         ? `已点赞 ${favoriteCount}`
         : `点赞 ${favoriteCount}`;
+    const coverImage =
+        resource.cover ?? createResourceCover(resource.title, resource.category);
 
     useEffect(() => {
         setIsFavorited(resource.isFavorited);
@@ -70,11 +85,14 @@ export default function ResourceOverviewCard({
 
         if (!csrfToken) {
             toast.error('缺少安全令牌，无法完成点赞');
+
             return;
         }
 
-        const nextIsFavorited = !isFavorited;
-        const currentCount = Number(favoriteCount);
+        const previousIsFavorited = isFavorited;
+        const previousFavoriteCount = favoriteCount;
+        const nextIsFavorited = !previousIsFavorited;
+        const currentCount = Number(previousFavoriteCount);
         const nextFavoriteCount = String(
             Math.max(0, currentCount + (nextIsFavorited ? 1 : -1)),
         );
@@ -104,8 +122,8 @@ export default function ResourceOverviewCard({
             setFavoriteCount(data.favoritesCount);
             toast.success(data.isFavorited ? '点赞成功' : '已取消点赞');
         } catch {
-            setIsFavorited(isFavorited);
-            setFavoriteCount(resource.stats.favorites);
+            setIsFavorited(previousIsFavorited);
+            setFavoriteCount(previousFavoriteCount);
             toast.error('点赞操作失败');
         } finally {
             setIsSubmittingFavorite(false);
@@ -116,12 +134,13 @@ export default function ResourceOverviewCard({
         <Card className="overflow-hidden rounded-3xl py-0">
             <div className="grid lg:min-h-[230px] lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
                 <img
-                    src={
-                        resource.cover ??
-                        createResourceCover(resource.title, resource.category)
-                    }
+                    src={coverImage}
                     alt={resource.title}
                     className="block aspect-[16/9] h-full w-full object-cover lg:min-h-[230px]"
+                    loading="eager"
+                    decoding="async"
+                    fetchPriority="high"
+                    sizes="(min-width: 1280px) 360px, (min-width: 1024px) 320px, 100vw"
                 />
 
                 <div className="flex min-w-0 px-5 py-4 sm:px-6 sm:py-5">
@@ -140,6 +159,7 @@ export default function ResourceOverviewCard({
                         <div className="flex flex-wrap items-center gap-2">
                             <Link
                                 href={categoryUrl}
+                                prefetch
                                 className="inline-flex items-center rounded-full border border-primary/15 bg-primary/[0.06] px-3 py-1.5 text-sm font-medium leading-none text-primary/90 transition-colors hover:border-primary/20 hover:bg-primary/[0.1] hover:text-primary dark:border-primary/20 dark:bg-primary/[0.12] dark:hover:bg-primary/[0.18]"
                             >
                                 {resource.category}
@@ -165,7 +185,7 @@ export default function ResourceOverviewCard({
 
                         <div className="flex flex-wrap items-center gap-3">
                             <Button asChild>
-                                <Link href={downloadUrl} preserveScroll>
+                                <Link href={downloadUrl} preserveScroll prefetch>
                                     <Download data-icon="inline-start" />
                                     下载
                                 </Link>
@@ -203,7 +223,7 @@ export default function ResourceOverviewCard({
                                 </Button>
                             ) : (
                                 <Button asChild variant="outline" aria-label="登录后点赞">
-                                    <Link href={login()}>
+                                    <Link href={login()} prefetch>
                                         <Heart data-icon="inline-start" />
                                         {`点赞 ${favoriteCount}`}
                                     </Link>

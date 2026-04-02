@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\ResourceCardResource;
+use App\Http\Resources\ResourceFileResource;
 use App\Http\Resources\ResourceOverviewResource;
 use App\Models\Resource;
 use App\Services\ResourceThumbnailService;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -68,13 +69,7 @@ class ResourceController extends Controller
             ],
             'filters' => $filters,
             'filterOptions' => [
-                'categories' => Resource::query()
-                    ->select('category')
-                    ->distinct()
-                    ->orderBy('category')
-                    ->pluck('category')
-                    ->all(),
-                'tags' => $this->collectTags(),
+                ...Resource::frontFilterOptions(),
                 'sorts' => [
                     ['value' => 'latest', 'label' => '最新发布'],
                     ['value' => 'popular', 'label' => '热门资源'],
@@ -99,15 +94,16 @@ class ResourceController extends Controller
     public function download(Resource $resource, string $entry): Response
     {
         $resource->loadMissing('user');
+        $file = $resource->resourceFiles()
+            ->with('uploader')
+            ->where('entry_key', $entry)
+            ->first();
 
-        $file = collect($this->resolveFiles($resource))
-            ->firstWhere('entry_key', $entry);
-
-        abort_unless(is_array($file), 404);
+        abort_unless($file !== null, 404);
 
         return Inertia::render('resources/download', [
             'resource' => (new ResourceOverviewResource($resource))->resolve(),
-            'download' => $file,
+            'download' => (new ResourceFileResource($file))->resolve(),
         ]);
     }
 
@@ -143,26 +139,57 @@ class ResourceController extends Controller
         $user = $request->user();
 
         abort_unless($user !== null, 403);
+        $resourceId = $resource->getKey();
+        $userId = $user->getKey();
 
-        if ($resource->isLikedBy($user)) {
-            $resource->likedByUsers()->detach($user->getKey());
-            Resource::withoutTimestamps(function () use ($resource): void {
-                $resource->forceFill([
-                    'favorites_count' => max(0, $resource->favorites_count - 1),
-                ])->save();
-            });
-        } else {
-            $resource->likedByUsers()->attach($user->getKey());
-            Resource::withoutTimestamps(function () use ($resource): void {
-                $resource->increment('favorites_count');
-            });
-        }
+        $isFavorited = DB::transaction(function () use ($resourceId, $userId): bool {
+            Resource::query()
+                ->whereKey($resourceId)
+                ->lockForUpdate()
+                ->first();
 
-        $resource->refresh();
+            $deleted = DB::table('resource_user_likes')
+                ->where('resource_id', $resourceId)
+                ->where('user_id', $userId)
+                ->delete();
+
+            if ($deleted > 0) {
+                Resource::withoutTimestamps(function () use ($resourceId): void {
+                    Resource::query()
+                        ->whereKey($resourceId)
+                        ->where('favorites_count', '>', 0)
+                        ->decrement('favorites_count');
+                });
+
+                return false;
+            }
+
+            $inserted = DB::table('resource_user_likes')
+                ->insertOrIgnore([
+                    'resource_id' => $resourceId,
+                    'user_id' => $userId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            if ($inserted > 0) {
+                Resource::withoutTimestamps(function () use ($resourceId): void {
+                    Resource::query()
+                        ->whereKey($resourceId)
+                        ->increment('favorites_count');
+                });
+            }
+
+            return true;
+        });
+
+        $favoritesCount = (int) Resource::query()
+            ->whereKey($resourceId)
+            ->value('favorites_count');
 
         return response()->json([
-            'isFavorited' => $resource->isLikedBy($user),
-            'favoritesCount' => $this->formatCompactNumber($resource->favorites_count),
+            'isFavorited' => $isFavorited,
+            'favoritesCount' => $this->formatCompactNumber($favoritesCount),
         ]);
     }
 
@@ -233,36 +260,6 @@ class ResourceController extends Controller
     }
 
     /**
-     * Collect all distinct tags from the resource table.
-     *
-     * @return list<string>
-     */
-    private function collectTags(): array
-    {
-        return Resource::query()
-            ->pluck('tags')
-            ->map(function (mixed $tags): array {
-                if (is_array($tags)) {
-                    return $tags;
-                }
-
-                if (is_string($tags)) {
-                    $decoded = json_decode($tags, true);
-
-                    return is_array($decoded) ? $decoded : [];
-                }
-
-                return [];
-            })
-            ->flatMap(fn (array $tags): Collection => collect($tags))
-            ->filter(fn (mixed $tag): bool => is_string($tag) && $tag !== '')
-            ->unique()
-            ->sort()
-            ->values()
-            ->all();
-    }
-
-    /**
      * Format a count for compact display.
      */
     private function formatCompactNumber(int $value): string
@@ -275,100 +272,17 @@ class ResourceController extends Controller
     }
 
     /**
-     * Normalize raw file entries to the front-end shape.
+     * Normalize file entries to the front-end shape.
      *
      * @return list<array<string, mixed>>
      */
     private function resolveFiles(Resource $resource): array
     {
-        return array_map(
-            fn (array $file, int $index): array => [
-                'entry_key' => isset($file['entry_key']) && is_string($file['entry_key']) && trim($file['entry_key']) !== ''
-                    ? trim($file['entry_key'])
-                    : 'entry-'.($index + 1),
-                'name' => $file['name'] ?? '资源文件',
-                'status' => $file['status'] ?? '可查看',
-                'platform' => $file['platform']
-                    ?? $this->resolveLegacyFileField($file['detail'] ?? null, 0)
-                    ?? ($resource->platforms[0] ?? 'Windows'),
-                'language' => $file['language']
-                    ?? $this->resolveLegacyFileField($file['detail'] ?? null, 1)
-                    ?? ($resource->platforms[1] ?? '简体中文'),
-                'size' => $file['size']
-                    ?? $this->resolveLegacyFileField($file['detail'] ?? null, 2)
-                    ?? '未知大小',
-                'code' => $this->resolveUnzipCode($file),
-                'extract_code' => $this->resolveExtractCode($file),
-                'uploaded_at' => $file['uploaded_at'] ?? $file['updated_at'] ?? '刚刚',
-                'download_detail' => isset($file['download_detail']) && is_string($file['download_detail']) && trim($file['download_detail']) !== ''
-                    ? trim($file['download_detail'])
-                    : null,
-                'download_url' => $this->resolveDownloadUrl($file),
-                'uploader' => [
-                    'id' => $file['uploader']['id']
-                        ?? $resource->user?->getKey(),
-                    'name' => $file['uploader']['name']
-                        ?? $resource->user?->name
-                        ?? '匿名上传者',
-                    'avatar' => $file['uploader']['avatar']
-                        ?? $resource->user?->avatar
-                        ?? null,
-                ],
-                'action_label' => $file['action_label'] ?? '查看',
-            ],
-            array_values($resource->files ?? []),
-            array_keys(array_values($resource->files ?? [])),
-        );
-    }
-
-    private function resolveLegacyFileField(mixed $detail, int $index): ?string
-    {
-        if (! is_string($detail) || trim($detail) === '') {
-            return null;
-        }
-
-        $segments = array_values(array_filter(array_map('trim', explode('/', $detail))));
-
-        return $segments[$index] ?? null;
-    }
-
-    private function resolveDownloadUrl(array $file): ?string
-    {
-        foreach (['download_url', 'url', 'link'] as $key) {
-            $value = $file[$key] ?? null;
-
-            if (is_string($value) && trim($value) !== '') {
-                return trim($value);
-            }
-        }
-
-        return null;
-    }
-
-    private function resolveUnzipCode(array $file): ?string
-    {
-        foreach (['code', 'unzip_code', 'unpack_code', 'archive_password', 'decompression_password'] as $key) {
-            $value = $file[$key] ?? null;
-
-            if (is_string($value) && trim($value) !== '') {
-                return trim($value);
-            }
-        }
-
-        return null;
-    }
-
-    private function resolveExtractCode(array $file): ?string
-    {
-        foreach (['extract_code', 'extraction_code', 'fetch_code', 'pickup_code'] as $key) {
-            $value = $file[$key] ?? null;
-
-            if (is_string($value) && trim($value) !== '') {
-                return trim($value);
-            }
-        }
-
-        return null;
+        return ResourceFileResource::collection(
+            $resource->resourceFiles()
+                ->with('uploader')
+                ->get(),
+        )->resolve();
     }
 
     /**

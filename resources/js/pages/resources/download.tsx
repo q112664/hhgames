@@ -38,6 +38,8 @@ export default function ResourceDownload({
     const { auth } = usePage().props;
     const cleanedDownloadName = cleanDownloadName(download.name);
     const downloadRemark = cleanDownloadRemark(download.download_detail);
+    const unpackCode = normalizeOptionalText(download.code);
+    const extractCode = normalizeOptionalText(download.extract_code);
     const displayDownloadUrl =
         download.download_url ?? 'https://pan.quark.cn/s/example-download';
     const isPlaceholderDownloadUrl = !download.download_url;
@@ -192,16 +194,22 @@ export default function ResourceDownload({
                                     </Badge>
                                 </div>
 
-                                <div className="flex flex-wrap gap-2">
-                                    <PasswordButton
-                                        label="解压码"
-                                        value={download.code}
-                                    />
-                                    <PasswordButton
-                                        label="提取密码"
-                                        value={download.extract_code}
-                                    />
-                                </div>
+                                {unpackCode || extractCode ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {unpackCode ? (
+                                            <PasswordButton
+                                                label="解压码"
+                                                value={unpackCode}
+                                            />
+                                        ) : null}
+                                        {extractCode ? (
+                                            <PasswordButton
+                                                label="提取密码"
+                                                value={extractCode}
+                                            />
+                                        ) : null}
+                                    </div>
+                                ) : null}
 
                                 <div className="space-y-1">
                                     <p className="text-sm text-muted-foreground">
@@ -300,24 +308,29 @@ function cleanDownloadRemark(value?: string | null) {
     return normalized === '' ? null : normalized;
 }
 
+function normalizeOptionalText(value?: string | null) {
+    if (!value) {
+        return null;
+    }
+
+    const normalized = value.trim();
+
+    return normalized === '' ? null : normalized;
+}
+
 function PasswordButton({
     label,
     value,
 }: {
     label: string;
-    value?: string | null;
+    value: string;
 }) {
     const [copyState, setCopyState] = useState<'idle' | 'success' | 'error'>(
         'idle',
     );
     const copyTimeoutRef = useRef<number | null>(null);
-    const isUnavailable = !value;
 
     const handleCopy = async () => {
-        if (!value) {
-            return;
-        }
-
         const success = await copyText(value);
         setCopyState(success ? 'success' : 'error');
 
@@ -336,33 +349,30 @@ function PasswordButton({
             onClick={() => {
                 void handleCopy();
             }}
-            disabled={isUnavailable}
-            className="inline-flex min-h-9 items-center gap-2.5 rounded-xl border border-border bg-background/85 px-3 py-1.5 text-left transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-9 items-center gap-2.5 rounded-xl border border-border bg-background/85 px-3 py-1.5 text-left transition-colors hover:bg-background"
         >
             <span className="text-sm text-muted-foreground">{label}</span>
             <span className="font-mono text-sm font-semibold tracking-[0.08em] text-foreground">
-                {value ?? '未提供'}
+                {value}
             </span>
-            {!isUnavailable ? (
-                <span className="inline-flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-300">
-                    {copyState === 'success' ? (
-                        <>
-                            <Check className="size-4" />
-                            已复制
-                        </>
-                    ) : copyState === 'error' ? (
-                        <>
-                            <Copy className="size-4" />
-                            复制失败
-                        </>
-                    ) : (
-                        <>
-                            <Copy className="size-4" />
-                            复制
-                        </>
-                    )}
-                </span>
-            ) : null}
+            <span className="inline-flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-300">
+                {copyState === 'success' ? (
+                    <>
+                        <Check className="size-4" />
+                        已复制
+                    </>
+                ) : copyState === 'error' ? (
+                    <>
+                        <Copy className="size-4" />
+                        复制失败
+                    </>
+                ) : (
+                    <>
+                        <Copy className="size-4" />
+                        复制
+                    </>
+                )}
+            </span>
         </button>
     );
 }

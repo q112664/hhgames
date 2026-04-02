@@ -31,7 +31,11 @@ class ResourceDetailResource extends JsonResource
             'platforms' => array_values($this->platforms ?? []),
             'tags' => array_values($this->tags ?? []),
             'basicInfo' => array_values($this->basic_info ?? []),
-            'files' => array_values($this->files ?? []),
+            'files' => ResourceFileResource::collection(
+                $this->resourceFiles()
+                    ->with('uploader')
+                    ->get(),
+            )->resolve(),
             'screenshots' => array_values(array_filter(array_map(
                 function (mixed $screenshot) use ($thumbnailService): ?array {
                     if (is_string($screenshot) && $screenshot !== '') {
